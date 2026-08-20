@@ -122,13 +122,13 @@ npm start
 
 ### Hostinger (Node.js, Express-Preset)
 
-**Eingabedatei / Startdatei: `server.cjs`** — nicht `app.js`. Das Express-Preset macht oft `require(entry)`. `package.json` hat `"type": "module"`, deshalb stirbt `require("app.js")` sofort mit `ERR_REQUIRE_ESM` und **leeren Runtime-Logs** (503). `server.cjs` ist echtes CommonJS: `node server.cjs` und `require("./server.cjs")` funktionieren. `app.js` bleibt ein ESM-Re-Export für lokales `node app.js`.
+**Eingabedatei / Startdatei: `app.js` lassen.** `app.js` ist CommonJS (Kopie von `server.cjs`): `node app.js` und `require("./app.js")` funktionieren. `package.json` hat kein `"type": "module"` mehr — sonst stirbt das Express-Preset mit `ERR_REQUIRE_ESM` und **leeren Runtime-Logs** (503). Procfile: `web: node server.cjs`.
 
 | Panel-Feld | Wert |
 | --- | --- |
 | Node.js-Version | **18** (oder höher) |
 | **Anwendungsroot** | Ordner des Git-Repos (nicht `public_html`) |
-| **Eingabedatei / Startdatei der Anwendung** | **`server.cjs`** (nicht `app.js`, nicht `dist/electron.cjs`) |
+| **Eingabedatei / Startdatei der Anwendung** | **`app.js`** (nicht `dist/electron.cjs`) |
 | **Build-Befehl** | leer lassen, oder optional `npm run build:web` |
 | **Start-Befehl** | nur falls extra nötig: `npm start` |
 | **STEELDART_MODE** | `online` (auch `ONLINE` / `Online` — Vergleich ist case-insensitive) |

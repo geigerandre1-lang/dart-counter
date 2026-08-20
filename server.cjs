@@ -1,9 +1,7 @@
 /**
- * Hostinger-safe CommonJS entry. Panel field "Eingabedatei" / startup file = server.cjs
- *
- * package.json has "type": "module", so require("app.js") / require("server.js")
- * throws ERR_REQUIRE_ESM and the process dies with empty runtime logs.
- * This .cjs file can be required() or run with `node server.cjs`.
+ * Hostinger-safe CommonJS entry. Procfile: `web: node server.cjs`.
+ * Panel Eingabedatei can stay app.js (identical CJS copy of this file).
+ * package.json is CommonJS (no "type": "module"), so require("app.js") works.
  */
 "use strict";
 
@@ -53,7 +51,7 @@ try {
 }
 
 var requireFromRoot = moduleApi.createRequire(path.join(root, "package.json"));
-var serverJs = path.join(root, "dist", "server.js");
+var serverJs = path.join(root, "dist", "server.mjs");
 var serverCjs = path.join(root, "dist", "server.cjs");
 var clientIndex = path.join(root, "dist", "client", "index.html");
 var wasmDest = path.join(root, "dist", "sql-wasm.wasm");
@@ -172,7 +170,7 @@ function ensureServerBundle() {
     return;
   }
   log("esbuild server bundle");
-  var okEsm = runViteOrEsbuild("esbuild", esbuildArgs("esm", "dist/server.js"), false);
+  var okEsm = runViteOrEsbuild("esbuild", esbuildArgs("esm", "dist/server.mjs"), false);
   var okCjs = runViteOrEsbuild("esbuild", esbuildArgs("cjs", "dist/server.cjs"), false);
   if (okEsm || okCjs || distExists()) return;
   console.error("steeldart dist/server still missing after esbuild");

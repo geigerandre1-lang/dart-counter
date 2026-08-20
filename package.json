@@ -2,7 +2,6 @@
   "name": "steeldart-counter",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "main": "server.cjs",
   "description": "Steeldart Dart-Counter – offline (Raspberry Pi) und online mit Räumen",
   "engines": {
@@ -15,7 +14,7 @@
     "build": "npm run build:web && npm run build:electron",
     "build:web": "vite build && npm run build:server",
     "copy:sql-wasm": "node scripts/copy-sql-wasm.mjs",
-    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --packages=external && esbuild server/index.ts --bundle --platform=node --format=cjs --outfile=dist/server.cjs --packages=external && node scripts/copy-sql-wasm.mjs",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.mjs --packages=external && esbuild server/index.ts --bundle --platform=node --format=cjs --outfile=dist/server.cjs --packages=external && node scripts/copy-sql-wasm.mjs",
     "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/electron.cjs --packages=external && esbuild electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.cjs",
     "start": "node server.cjs",
     "desktop": "npm run build && electron dist/electron.cjs",
