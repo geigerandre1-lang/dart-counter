@@ -244,3 +244,28 @@ describe("player create API", () => {
     }
   });
 });
+
+describe("Hostinger PORT bind", () => {
+  it("listens on process.env.PORT exactly", async () => {
+    const prev = process.env.PORT;
+    process.env.PORT = "39401";
+    try {
+      const started = await startServer({
+        host: "127.0.0.1",
+        mode: "offline",
+        dbPath: tmpDb(),
+        publicDir: null,
+      });
+      try {
+        expect(started.port).toBe(39401);
+        const res = await fetch(`http://127.0.0.1:${started.port}/api/health`);
+        expect(res.ok).toBe(true);
+      } finally {
+        await started.close();
+      }
+    } finally {
+      if (prev == null) delete process.env.PORT;
+      else process.env.PORT = prev;
+    }
+  });
+});

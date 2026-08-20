@@ -1,6 +1,8 @@
 import { createRequire } from "node:module";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(path.join(process.cwd(), "package.json"));
 
@@ -93,6 +95,14 @@ export function defaultDbPath(): string {
   return path.join(process.cwd(), "data", "steeldart.sqlite");
 }
 
+function bundledWasmPath(): string {
+  try {
+    return path.join(path.dirname(fileURLToPath(import.meta.url)), "sql-wasm.wasm");
+  } catch {
+    return "";
+  }
+}
+
 function resolveSqlJsWasm(): string {
   const resourcesPath =
     typeof process !== "undefined" && typeof process.resourcesPath === "string"
@@ -100,6 +110,8 @@ function resolveSqlJsWasm(): string {
       : "";
   const candidates = [
     resourcesPath ? path.join(resourcesPath, "sql-wasm.wasm") : "",
+    bundledWasmPath(),
+    path.join(process.cwd(), "dist", "sql-wasm.wasm"),
     (() => {
       try {
         return path.join(path.dirname(require.resolve("sql.js")), "sql-wasm.wasm");
@@ -112,7 +124,7 @@ function resolveSqlJsWasm(): string {
   for (const file of candidates) {
     if (fs.existsSync(file)) return file;
   }
-  return candidates[candidates.length - 1] ?? path.join(process.cwd(), "node_modules", "sql.js", "dist", "sql-wasm.wasm");
+  return candidates[candidates.length - 1] ?? path.join(process.cwd(), "dist", "sql-wasm.wasm");
 }
 
 function preferSqlJs(): boolean {
@@ -135,17 +147,41 @@ function tryOpenBetterSqlite(filePath: string): MiniDb | null {
   }
 }
 
-export async function openMiniDb(filePath: string): Promise<MiniDb> {
-  if (filePath !== ":memory:") {
+function ensureWritableDbPath(filePath: string): string {
+  if (filePath === ":memory:") return filePath;
+  try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    return filePath;
+  } catch (err) {
+    const fallback = path.join(os.tmpdir(), "steeldart.sqlite");
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`DB-Pfad nicht schreibbar (${filePath}), nutze ${fallback}:`, message);
+    fs.mkdirSync(path.dirname(fallback), { recursive: true });
+    return fallback;
   }
+}
+
+export async function openMiniDb(filePath: string): Promise<MiniDb> {
+  filePath = ensureWritableDbPath(filePath);
 
   const native = tryOpenBetterSqlite(filePath);
   if (native) return native;
 
-  const initSqlJs = (await import("sql.js")).default;
+  let initSqlJs;
+  try {
+    initSqlJs = (await import("sql.js")).default;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`sql.js konnte nicht geladen werden: ${message}`);
+  }
   const wasmFile = resolveSqlJsWasm();
+  if (!fs.existsSync(wasmFile)) {
+    throw new Error(
+      `sql.js WASM fehlt (${wasmFile}). Build kopiert nach dist/sql-wasm.wasm — auf Hostinger Build-Befehl npm run build ausführen.`,
+    );
+  }
   const SQL = await initSqlJs({
+    wasmBinary: fs.readFileSync(wasmFile),
     locateFile: (file) => path.join(path.dirname(wasmFile), file),
   });
 

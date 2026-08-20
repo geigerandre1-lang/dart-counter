@@ -54,7 +54,7 @@ function tcpPortOpen(port: number): Promise<boolean> {
     });
     socket.setTimeout(400, () => {
       socket.destroy();
-      resolve(true);
+      resolve(false);
     });
     socket.on("error", () => resolve(false));
   });
@@ -71,12 +71,12 @@ async function isOurServerOn(port: number): Promise<boolean> {
   }
 }
 
-function bindPort(server: http.Server, host: string, port: number): Promise<void> {
+function bindPort(server: http.Server, host: string, port: number, exclusive = true): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (err: NodeJS.ErrnoException) => reject(err);
     server.once("error", onError);
     try {
-      server.listen({ port, host, exclusive: true }, () => {
+      server.listen({ port, host, exclusive }, () => {
         server.off("error", onError);
         resolve();
       });
@@ -85,6 +85,16 @@ function bindPort(server: http.Server, host: string, port: number): Promise<void
       reject(err);
     }
   });
+}
+
+function envPort(): number | undefined {
+  const raw = process.env.PORT;
+  if (raw == null || String(raw).trim() === "") return undefined;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Ungültiger PORT: ${raw}`);
+  }
+  return port;
 }
 
 async function listenExclusive(server: http.Server, host: string, startPort: number): Promise<number> {
@@ -241,7 +251,8 @@ function readAdminToken(req: Request): string | undefined {
 }
 
 export async function startServer(options: StartServerOptions = {}): Promise<StartedServer> {
-  const runtime = { port: Number(options.port ?? process.env.PORT ?? 3000) };
+  const pinnedEnvPort = options.port == null ? envPort() : undefined;
+  const runtime = { port: options.port ?? pinnedEnvPort ?? 3000 };
   const HOST = options.host ?? process.env.HOST ?? "0.0.0.0";
   const DEPLOY_MODE: DeployMode =
     options.mode ?? (process.env.STEELDART_MODE === "online" ? "online" : "offline");
@@ -842,7 +853,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   cleanupTimer.unref();
 
   try {
-    runtime.port = await listenExclusive(server, HOST, runtime.port);
+    if (pinnedEnvPort != null) {
+      await bindPort(server, HOST, pinnedEnvPort, false);
+      runtime.port = pinnedEnvPort;
+    } else {
+      runtime.port = await listenExclusive(server, HOST, runtime.port);
+    }
   } catch (err) {
     clearInterval(cleanupTimer);
     clearInterval(persistTimer);
@@ -855,7 +871,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   }
 
   const urls = lanUrls(runtime.port);
-  console.log(`Steeldart Dart-Counter (${DEPLOY_MODE}) auf http://${HOST}:${runtime.port}`);
+  const listenUrl = `http://${HOST}:${runtime.port}`;
+  console.log(`listening ${listenUrl}`);
+  console.log(`Steeldart Dart-Counter (${DEPLOY_MODE}) auf ${listenUrl}`);
   if (DEPLOY_MODE === "offline") {
     console.log("  Offline: Geräte die die IP öffnen, landen im lokalen Spiel.");
   } else {

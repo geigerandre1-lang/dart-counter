@@ -118,7 +118,7 @@ npm run build
 npm start
 ```
 
-`npm start` baut automatisch (`npm run build:web`, Vite + esbuild), falls `dist/` fehlt — z. B. wenn das Panel nur `npm install && npm start` ausführt.
+`npm start` startet **sofort** `dist/server.js` (kein Vite zur Laufzeit). Fehlt `dist/`, wird **einmal** gebaut und danach gestartet — das kann auf Shared Hosting das Start-Timeout (503) auslösen. Deshalb Build und Start im Panel trennen.
 
 ### Hostinger (Node.js, z. B. v18.20.8)
 
@@ -129,9 +129,14 @@ Node **18+** reicht. Electron-Warnungen zu Node 22 ignorieren — die Desktop-Pa
 | Node.js-Version | **18** (oder höher) |
 | **Build-Befehl** | `npm run build` |
 | **Start-Befehl** | `npm start` |
-| Umgebungsvariablen | siehe unten |
+| **STEELDART_MODE** | `online` |
+| **PORT** | **nicht setzen** — das Panel injiziert den Port |
 
-Wenn das Panel **keinen** eigenen Build-Schritt hat und nur `npm install && npm start` läuft: Start-Befehl trotzdem `npm start` (baut `dist/` bei Bedarf). Alternativ Build-Befehl `npm run build` setzen — das ist Vite + esbuild, **kein** Python.
+Nach einem Git-Pull im Panel **Redeploy** (Build + Restart), nicht nur Dateien ziehen. Ohne neuen Build fehlt `dist/` bzw. `dist/sql-wasm.wasm`, und der Prozess stirbt bevor er lauscht.
+
+`npm start` = `node dist/server.js` (über ein dünnes Wrapper-Skript). Der Server bindet `process.env.PORT` auf `0.0.0.0` (oder `HOST`). `better-sqlite3` darf fehlen — Fallback ist sql.js; das WASM liegt nach dem Build in `dist/sql-wasm.wasm`.
+
+Wenn das Panel **keinen** eigenen Build-Schritt hat: trotzdem Build-Befehl `npm run build` eintragen. Nur `npm install && npm start` ohne vorheriges Build riskiert 503 durch Timeout.
 
 `npm run build:web` ist dasselbe ohne Electron-Bundle; für reines Webhosting reicht das.
 
@@ -142,7 +147,7 @@ STEELDART_MODE=online
 STEELDART_ADMIN_PASSWORD=dein-geheimes-passwort
 ```
 
-`PORT` setzt Hostinger in der Regel selbst. Optional: `STEELDART_SQLJS=1` (sql.js erzwingen, Native-SQLite gar nicht laden), `STEELDART_DB=/pfad/zur/datei.sqlite`.
+`PORT` nicht von Hand setzen. Optional: `STEELDART_SQLJS=1` (sql.js erzwingen, Native-SQLite gar nicht laden), `STEELDART_DB=/pfad/zur/datei.sqlite`.
 
 Kein `--omit=dev` beim Install: der Build braucht Vite und esbuild (`devDependencies`). Volles `npm install` ist korrekt.
 
