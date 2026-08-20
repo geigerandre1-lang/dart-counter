@@ -103,7 +103,7 @@ npm run dist
 
 ## Web-App auf dem öffentlichen Node-Server
 
-Online-Modus (Räume, Monitor, Admin):
+Online-Modus (Räume, Monitor, Admin). **Kein Python, kein node-gyp.** `better-sqlite3` und Electron sind optional; fehlt das Native-Addon, nutzt der Server **sql.js** (reines JavaScript).
 
 ```bash
 STEELDART_MODE=online npm run build
@@ -117,6 +117,34 @@ $env:STEELDART_MODE="online"
 npm run build
 npm start
 ```
+
+`npm start` baut automatisch (`npm run build:web`, Vite + esbuild), falls `dist/` fehlt — z. B. wenn das Panel nur `npm install && npm start` ausführt.
+
+### Hostinger (Node.js, z. B. v18.20.8)
+
+Node **18+** reicht. Electron-Warnungen zu Node 22 ignorieren — die Desktop-Pakete sind `optionalDependencies` und dürfen bei `npm install` fehlschlagen.
+
+| Panel-Feld | Wert |
+| --- | --- |
+| Node.js-Version | **18** (oder höher) |
+| **Build-Befehl** | `npm run build` |
+| **Start-Befehl** | `npm start` |
+| Umgebungsvariablen | siehe unten |
+
+Wenn das Panel **keinen** eigenen Build-Schritt hat und nur `npm install && npm start` läuft: Start-Befehl trotzdem `npm start` (baut `dist/` bei Bedarf). Alternativ Build-Befehl `npm run build` setzen — das ist Vite + esbuild, **kein** Python.
+
+`npm run build:web` ist dasselbe ohne Electron-Bundle; für reines Webhosting reicht das.
+
+**Umgebung:**
+
+```bash
+STEELDART_MODE=online
+STEELDART_ADMIN_PASSWORD=dein-geheimes-passwort
+```
+
+`PORT` setzt Hostinger in der Regel selbst. Optional: `STEELDART_SQLJS=1` (sql.js erzwingen, Native-SQLite gar nicht laden), `STEELDART_DB=/pfad/zur/datei.sqlite`.
+
+Kein `--omit=dev` beim Install: der Build braucht Vite und esbuild (`devDependencies`). Volles `npm install` ist korrekt.
 
 Standardbesucher sehen nur **Raum-ID eingeben** (kein Passwort). Optional: QR-Link `https://<server>/?raum=CODE` tritt automatisch bei.
 

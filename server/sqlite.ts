@@ -115,11 +115,13 @@ function resolveSqlJsWasm(): string {
   return candidates[candidates.length - 1] ?? path.join(process.cwd(), "node_modules", "sql.js", "dist", "sql-wasm.wasm");
 }
 
-export async function openMiniDb(filePath: string): Promise<MiniDb> {
-  if (filePath !== ":memory:") {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  }
+function preferSqlJs(): boolean {
+  const value = process.env.STEELDART_SQLJS?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
 
+function tryOpenBetterSqlite(filePath: string): MiniDb | null {
+  if (preferSqlJs()) return null;
   try {
     const Database = require("better-sqlite3");
     const db = new Database(filePath);
@@ -127,8 +129,19 @@ export async function openMiniDb(filePath: string): Promise<MiniDb> {
     db.pragma("foreign_keys = ON");
     return new BetterSqliteDb(db);
   } catch (err) {
-    console.warn("better-sqlite3 nicht nutzbar, fallback auf sql.js:", err);
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("better-sqlite3 nicht nutzbar, fallback auf sql.js:", message);
+    return null;
   }
+}
+
+export async function openMiniDb(filePath: string): Promise<MiniDb> {
+  if (filePath !== ":memory:") {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  }
+
+  const native = tryOpenBetterSqlite(filePath);
+  if (native) return native;
 
   const initSqlJs = (await import("sql.js")).default;
   const wasmFile = resolveSqlJsWasm();

@@ -12,10 +12,11 @@
     "dev": "concurrently -n server,client -c cyan,magenta \"tsx watch server/index.ts\" \"vite --host\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite --host",
-    "build": "vite build && npm run build:server && npm run build:electron",
+    "build": "npm run build:web && npm run build:electron",
+    "build:web": "vite build && npm run build:server",
     "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --packages=external",
     "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/electron.cjs --packages=external && esbuild electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.cjs",
-    "start": "node dist/server.js",
+    "start": "node scripts/start.mjs",
     "desktop": "npm run build && electron .",
     "pi": "npm run desktop",
     "electron": "electron .",
@@ -98,11 +99,15 @@
     }
   },
   "dependencies": {
-    "better-sqlite3": "^13.0.3",
     "express": "^4.21.2",
     "qrcode": "^1.5.4",
     "sql.js": "^1.14.2",
     "ws": "^8.18.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^13.0.3",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
@@ -116,8 +121,6 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.1.2",
-    "electron": "^43.4.1",
-    "electron-builder": "^26.15.3",
     "esbuild": "^0.24.2",
     "postcss": "^8.4.49",
     "react": "^18.3.1",
