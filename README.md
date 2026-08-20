@@ -26,7 +26,9 @@ npm run desktop
 
 ## Portable Windows-App (ohne Installer)
 
-Jeder Push auf `master` baut die portable `.exe` in **GitHub Actions**. Download: Repo → **Actions** → letzter erfolgreicher Lauf **Portable Windows EXE** → **Artifacts** → `steeldart-counter-win-portable`. Bei Tags landet die Datei zusätzlich am GitHub Release.
+**Download:** [GitHub Releases](https://github.com/geigerandre1-lang/dart-counter/releases) — Release **Windows Portable (aktuell)** (Tag `latest`). Jeder Push auf `master` ersetzt die portable `.exe` dort.
+
+Zusätzlich liegt die Datei als Actions-Artifact (Repo → **Actions** → **Portable Windows EXE**).
 
 Lokal (Windows, Node 18+):
 
