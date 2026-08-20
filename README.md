@@ -48,7 +48,7 @@ Cross-Compile von Windows nach ARM ist oft unzuverlässig (native Module). Am Pi
 ```bash
 sudo apt update
 sudo apt install -y git nodejs npm
-git clone <repo-url> dart-counter
+git clone https://github.com/geigerandre1-lang/dart-counter.git dart-counter
 cd dart-counter
 npm install
 npm run dist:pi:native
