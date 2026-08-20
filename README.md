@@ -127,14 +127,18 @@ Node **18+** reicht. Electron-Warnungen zu Node 22 ignorieren — die Desktop-Pa
 | Panel-Feld | Wert |
 | --- | --- |
 | Node.js-Version | **18** (oder höher) |
+| **Anwendungsroot** | Ordner des Git-Repos (nicht `public_html`) |
+| **Startdatei der Anwendung** | `app.js` |
 | **Build-Befehl** | `npm run build` |
-| **Start-Befehl** | `npm start` |
+| **Start-Befehl** | nur falls das Panel ihn extra hat: `npm start` |
 | **STEELDART_MODE** | `online` |
 | **PORT** | **nicht setzen** — das Panel injiziert den Port |
 
-Nach einem Git-Pull im Panel **Redeploy** (Build + Restart), nicht nur Dateien ziehen. Ohne neuen Build fehlt `dist/` bzw. `dist/sql-wasm.wasm`, und der Prozess stirbt bevor er lauscht.
+Die Domain `dart-counter.turniertool.eu` muss **dieser Node-App** zugeordnet sein. Zeigt sie noch auf `public_html`, kommt Hostingers 503 oder die Default-Seite. `package.json` `"main"` ist die Electron-App — im Panel **nicht** als Startdatei nutzen.
 
-`npm start` = `node dist/server.js` (über ein dünnes Wrapper-Skript). Der Server bindet `process.env.PORT` auf `0.0.0.0` (oder `HOST`). `better-sqlite3` darf fehlen — Fallback ist sql.js; das WASM liegt nach dem Build in `dist/sql-wasm.wasm`.
+Nach einem Git-Pull im Panel **Redeploy** (Build + Restart) und Status **Running**, nicht nur Dateien ziehen. Ohne neuen Build fehlt `dist/` bzw. `dist/sql-wasm.wasm`, und der Prozess stirbt bevor er lauscht.
+
+`app.js` lädt `dist/server.js`. `npm start` macht dasselbe über `scripts/start.mjs`. Der Server bindet `process.env.PORT` auf `0.0.0.0` (oder `HOST`). `better-sqlite3` darf fehlen — Fallback ist sql.js; das WASM liegt nach dem Build in `dist/sql-wasm.wasm`.
 
 Wenn das Panel **keinen** eigenen Build-Schritt hat: trotzdem Build-Befehl `npm run build` eintragen. Nur `npm install && npm start` ohne vorheriges Build riskiert 503 durch Timeout.
 
