@@ -93,11 +93,7 @@ function bindPort(server: http.Server, host: string, port: number, exclusive = t
       resolve();
     };
     try {
-      if (!exclusive) {
-        server.listen(port, host, onListening);
-      } else {
-        server.listen({ port, host, exclusive }, onListening);
-      }
+      server.listen({ port, host, exclusive }, onListening);
     } catch (err) {
       server.off("error", onError);
       reject(err);
@@ -105,14 +101,20 @@ function bindPort(server: http.Server, host: string, port: number, exclusive = t
   });
 }
 
-function envPort(): number | undefined {
-  const raw = process.env.PORT || process.env.APP_PORT;
-  if (raw == null || String(raw).trim() === "") return undefined;
-  const port = Number(raw);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+function parseListenPort(raw: string | undefined): number | undefined {
+  if (raw == null) return undefined;
+  const trimmed = String(raw).trim();
+  if (trimmed === "") return undefined;
+  const port = Number.parseInt(trimmed, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535 || !/^\d+$/.test(trimmed)) {
     throw new Error(`Ungültiger PORT: ${raw}`);
   }
   return port;
+}
+
+/** Hostinger/PaaS inject PORT (or APP_PORT). That number is pinned — never hop. */
+function envPort(): number | undefined {
+  return parseListenPort(process.env.PORT) ?? parseListenPort(process.env.APP_PORT);
 }
 
 async function listenExclusive(server: http.Server, host: string, startPort: number): Promise<number> {
@@ -270,17 +272,20 @@ function readAdminToken(req: Request): string | undefined {
 }
 
 export async function startServer(options: StartServerOptions = {}): Promise<StartedServer> {
-  const pinnedEnvPort = options.port == null ? envPort() : undefined;
-  const runtime = { port: options.port ?? pinnedEnvPort ?? 3000 };
+  const pinnedEnvPort = envPort();
+  const hop = pinnedEnvPort == null;
+  const runtime = { port: pinnedEnvPort ?? options.port ?? 3000 };
   const HOST = options.host ?? process.env.HOST ?? "0.0.0.0";
   const DEPLOY_MODE: DeployMode = options.mode ?? deployModeFromEnv();
   bootLog(
     "steeldart startServer",
     `mode=${DEPLOY_MODE}`,
+    `STEELDART_MODE=${process.env.STEELDART_MODE ?? ""}`,
     `PORT=${process.env.PORT ?? ""}`,
     `APP_PORT=${process.env.APP_PORT ?? ""}`,
     `HOST=${HOST}`,
-    `hop=${pinnedEnvPort == null}`,
+    `hop=${hop}`,
+    `bind=${runtime.port}`,
   );
   const persistPath = options.persistPath ?? null;
   const store = await openStatsStore(options.dbPath ?? defaultDbPath());
@@ -885,7 +890,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     if (server.listening) {
       const addr = server.address();
       if (addr && typeof addr === "object") runtime.port = addr.port;
-    } else if (pinnedEnvPort != null) {
+    } else if (!hop && pinnedEnvPort != null) {
       await bindPort(server, HOST, pinnedEnvPort, false);
       runtime.port = pinnedEnvPort;
     } else {
@@ -905,9 +910,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   const urls = lanUrls(runtime.port);
   const listenUrl = `http://${HOST}:${runtime.port}`;
   bootLog(`listening ${listenUrl}`);
-  bootLog(
-    `bind PORT=${process.env.PORT ?? ""} APP_PORT=${process.env.APP_PORT ?? ""} HOST=${HOST} hop=${pinnedEnvPort == null}`,
-  );
+  bootLog(`hop=${hop} bind=${runtime.port}`);
   bootLog(`Steeldart Dart-Counter (${DEPLOY_MODE}) auf ${listenUrl}`);
   if (DEPLOY_MODE === "offline") {
     console.log("  Offline: Geräte die die IP öffnen, landen im lokalen Spiel.");

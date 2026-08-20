@@ -260,7 +260,11 @@ describe("STEELDART_MODE", () => {
 
   it("starts in online mode when env is ONLINE", async () => {
     const prev = process.env.STEELDART_MODE;
+    const prevPort = process.env.PORT;
+    const prevApp = process.env.APP_PORT;
     process.env.STEELDART_MODE = "ONLINE";
+    process.env.PORT = "39407";
+    delete process.env.APP_PORT;
     try {
       const started = await startServer({
         host: "127.0.0.1",
@@ -269,6 +273,7 @@ describe("STEELDART_MODE", () => {
       });
       try {
         expect(started.mode).toBe("online");
+        expect(started.port).toBe(39407);
         expect(typeof started.app).toBe("function");
         const info = await fetch(`http://127.0.0.1:${started.port}/api/info`);
         expect(info.ok).toBe(true);
@@ -280,6 +285,10 @@ describe("STEELDART_MODE", () => {
     } finally {
       if (prev == null) delete process.env.STEELDART_MODE;
       else process.env.STEELDART_MODE = prev;
+      if (prevPort == null) delete process.env.PORT;
+      else process.env.PORT = prevPort;
+      if (prevApp == null) delete process.env.APP_PORT;
+      else process.env.APP_PORT = prevApp;
     }
   });
 });
@@ -332,6 +341,32 @@ describe("Hostinger PORT bind", () => {
         const healthz = await fetch(`http://127.0.0.1:${started.port}/healthz`);
         expect(healthz.status).toBe(200);
         expect(await healthz.text()).toBe("ok");
+      } finally {
+        await started.close();
+      }
+    } finally {
+      if (prev == null) delete process.env.PORT;
+      else process.env.PORT = prev;
+      if (prevApp == null) delete process.env.APP_PORT;
+      else process.env.APP_PORT = prevApp;
+    }
+  });
+
+  it("never hops when PORT is set, even if options.port differs", async () => {
+    const prev = process.env.PORT;
+    const prevApp = process.env.APP_PORT;
+    process.env.PORT = "39405";
+    delete process.env.APP_PORT;
+    try {
+      const started = await startServer({
+        port: 3000,
+        host: "127.0.0.1",
+        mode: "offline",
+        dbPath: tmpDb(),
+        publicDir: null,
+      });
+      try {
+        expect(started.port).toBe(39405);
       } finally {
         await started.close();
       }
