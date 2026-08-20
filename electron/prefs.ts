@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { app } from "electron";
-import { isFresh, type LocalSave, type OnlineResume } from "../shared/persist.js";
+import { isFresh, pickBoardResume, storeBoardResume, type LocalSave, type OnlineResume } from "../shared/persist.js";
 
 export const DEFAULT_OFFLINE_PORT = 3000;
 
@@ -11,7 +11,9 @@ export interface DesktopPrefs {
   /** Hosted-server admin password for auto createRoom. */
   adminPassword?: string;
   lastMode?: "offline" | "online";
+  /** @deprecated keyed map in onlineResumes — kept to migrate one-board installs */
   onlineResume?: OnlineResume | null;
+  onlineResumes?: Record<string, OnlineResume>;
   offlinePort?: number;
   boardId?: string;
   boardName?: string;
@@ -48,6 +50,22 @@ export function ensureBoardIdentity(prefs: DesktopPrefs): DesktopPrefs {
   if (!next.boardName || !next.boardName.trim()) {
     next = { ...next, boardName: "Scheibe 1" };
     changed = true;
+  }
+  const boardId = next.boardId!;
+  const resumes = { ...(next.onlineResumes ?? {}) };
+  const legacy = next.onlineResume;
+  if (legacy?.roomCode && legacy.roomCode !== "LOCAL") {
+    const legacyId = legacy.boardId || boardId;
+    if (legacyId === boardId && !resumes[boardId]) {
+      resumes[boardId] = {
+        serverUrl: legacy.serverUrl,
+        roomCode: legacy.roomCode,
+        boardId,
+        savedAt: legacy.savedAt,
+      };
+      next = { ...next, onlineResumes: resumes, onlineResume: resumes[boardId] };
+      changed = true;
+    }
   }
   if (changed) {
     fs.mkdirSync(path.dirname(prefsPath()), { recursive: true });
@@ -100,28 +118,37 @@ export function offlinePort(prefs = loadPrefs()): number {
   return DEFAULT_OFFLINE_PORT;
 }
 
-export function rememberOnlineRoom(serverUrl: string, roomCode: string): void {
-  if (!roomCode || roomCode === "LOCAL") return;
+export function rememberOnlineRoom(serverUrl: string, roomCode: string, boardId?: string): void {
+  const prefs = loadPrefs();
+  const id = (boardId || prefs.boardId || "").trim();
+  if (!id || !roomCode || roomCode === "LOCAL") return;
   if (!serverUrl.trim()) return;
+  const onlineResumes = storeBoardResume(prefs.onlineResumes, serverUrl, roomCode, id);
   savePrefs({
     remoteUrl: serverUrl,
     lastMode: "online",
-    onlineResume: { serverUrl, roomCode, savedAt: Date.now() },
+    onlineResumes,
+    onlineResume: onlineResumes[id] ?? null,
   });
 }
 
-export function clearOnlineResume(): void {
+export function clearOnlineResume(boardId?: string): void {
   const cur = loadPrefs();
-  if (!cur.onlineResume) return;
-  savePrefs({ ...cur, onlineResume: null });
+  const id = (boardId || cur.boardId || "").trim();
+  const onlineResumes = { ...(cur.onlineResumes ?? {}) };
+  if (id) delete onlineResumes[id];
+  const clearLegacy = !cur.onlineResume?.boardId || cur.onlineResume.boardId === id;
+  savePrefs({
+    onlineResumes,
+    onlineResume: clearLegacy ? null : cur.onlineResume,
+  });
 }
 
-export function freshOnlineResume(serverUrl: string): OnlineResume | null {
-  const resume = loadPrefs().onlineResume;
-  if (!resume) return null;
-  if (resume.serverUrl.replace(/\/+$/, "") !== serverUrl.replace(/\/+$/, "")) return null;
-  if (!isFresh(resume.savedAt)) return null;
-  return resume;
+export function freshOnlineResume(serverUrl: string, boardId?: string): OnlineResume | null {
+  const prefs = loadPrefs();
+  const id = (boardId || prefs.boardId || "").trim();
+  if (!id) return null;
+  return pickBoardResume(prefs.onlineResumes, prefs.onlineResume ?? null, serverUrl, id);
 }
 
 export function loadOfflineSave(): LocalSave | null {

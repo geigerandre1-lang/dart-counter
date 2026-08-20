@@ -67,6 +67,7 @@ export default function App() {
   const [tab, setTab] = useState<AppTab>("play");
   const [adminToken, setAdminToken] = useState<string | null>(() => loadAdminToken());
   const [adminPasswordSet, setAdminPasswordSet] = useState(false);
+  const [savedAdminPassword, setSavedAdminPassword] = useState("");
   const [creatingHostRoom, setCreatingHostRoom] = useState(false);
   const originRef = useRef<string | null>(null);
   const pendingHostCreate = useRef(false);
@@ -165,7 +166,7 @@ export default function App() {
       socket.connect(session.origin);
       if (shouldCreate) {
         if (!password) {
-          setError("Bitte das Admin-Passwort im Admin-Menü neben der Server-URL speichern.");
+          setError("Bitte das Online-Passwort im Admin-Menü neben der Webserver-URL speichern.");
           pendingHostCreate.current = false;
           setCreatingHostRoom(false);
         } else {
@@ -207,6 +208,7 @@ export default function App() {
         if (state.boardName) setBoardName(state.boardName);
         setOnlineConfigured(Boolean(state.onlineConfigured ?? state.savedRemoteUrl.trim()));
         setAdminPasswordSet(Boolean(state.adminPasswordSet));
+        if (typeof state.adminPassword === "string") setSavedAdminPassword(state.adminPassword);
         if (state.lastMode) setLastMode(state.lastMode);
         if (state.adminToken) applyAdminToken(state.adminToken);
         if (state.session) applySession(state.session);
@@ -227,7 +229,6 @@ export default function App() {
         setOrigin(apiOrigin);
         socket.offline = nextMode === "offline";
         socket.pendingJoin = nextMode === "online" ? deepJoin : null;
-        if (info.lanUrls?.length) setLanUrls(info.lanUrls);
         socket.connect(apiOrigin);
       })
       .catch(() => {
@@ -257,7 +258,10 @@ export default function App() {
 
   const leaveOnline = () => {
     socket.remember(null);
+    socket.send({ type: "leaveRoom" });
     setSnap(null);
+    setDeepJoin(null);
+    setResumingOnline(false);
   };
 
   const changeMode = async () => {
@@ -306,15 +310,16 @@ export default function App() {
     await startOffline(false);
   };
 
-  const startOnline = async () => {
+  const startOnline = async (explicitUrl?: string) => {
     if (!desktop?.connectOnline) return;
-    if (!savedRemoteUrl.trim()) {
-      setError("Keine Webserver-URL konfiguriert. Bitte im Admin-Menü setzen.");
+    const target = (explicitUrl ?? savedRemoteUrl).trim();
+    if (!target) {
+      setError("Keine Webserver-URL konfiguriert. Bitte Webserver-URL und Online-Passwort setzen.");
       return;
     }
     setBusy(true);
     setError(null);
-    const result = await desktop.connectOnline(savedRemoteUrl);
+    const result = await desktop.connectOnline(target);
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -387,6 +392,7 @@ export default function App() {
           boardName={boardName}
           desktopSettings={Boolean(desktop)}
           adminPasswordSet={adminPasswordSet}
+          savedAdminPassword={savedAdminPassword}
           onSettingsSaved={(state) => {
             setSavedRemoteUrl(state.savedRemoteUrl);
             setOfflinePort(state.offlinePort);
@@ -394,6 +400,7 @@ export default function App() {
             if (state.boardId) setBoardId(state.boardId);
             if (state.boardName) setBoardName(state.boardName);
             if (typeof state.adminPasswordSet === "boolean") setAdminPasswordSet(state.adminPasswordSet);
+            if (typeof state.adminPassword === "string") setSavedAdminPassword(state.adminPassword);
           }}
           onLogout={() => applyAdminToken(null)}
         />
@@ -402,13 +409,22 @@ export default function App() {
       {showChrome && tab === "play" && showGate && (
         <DesktopGate
           savedRemoteUrl={savedRemoteUrl}
+          savedAdminPassword={savedAdminPassword}
           lastMode={lastMode}
           busy={busy}
           error={error}
           onlineConfigured={onlineConfigured}
+          adminPasswordSet={adminPasswordSet}
           onOffline={() => void requestOffline()}
-          onOnline={() => void startOnline()}
+          onOnline={(url) => void startOnline(url)}
           onAdminToken={applyAdminToken}
+          onSettingsSaved={(state) => {
+            setSavedRemoteUrl(state.savedRemoteUrl);
+            setOfflinePort(state.offlinePort);
+            setOnlineConfigured(Boolean(state.onlineConfigured ?? state.savedRemoteUrl.trim()));
+            if (typeof state.adminPasswordSet === "boolean") setAdminPasswordSet(state.adminPasswordSet);
+            if (typeof state.adminPassword === "string") setSavedAdminPassword(state.adminPassword);
+          }}
         />
       )}
 

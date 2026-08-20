@@ -24,6 +24,7 @@ interface DesktopSettingsResult {
     boardId?: string;
     boardName?: string;
     adminPasswordSet?: boolean;
+    adminPassword?: string;
   };
 }
 
@@ -40,6 +41,7 @@ interface SteeldartDesktop {
     boardName?: string;
     adminToken?: string | null;
     adminPasswordSet?: boolean;
+    adminPassword?: string;
   }>;
   offlineStatus?: () => Promise<{ resume: boolean; savedAt: number | null }>;
   startOffline?: (opts?: { resume?: boolean }) => Promise<DesktopResult>;

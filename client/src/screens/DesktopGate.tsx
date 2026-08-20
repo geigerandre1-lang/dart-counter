@@ -1,31 +1,84 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { saveAdminToken } from "../lib/adminSession";
 
 interface Props {
   savedRemoteUrl: string;
+  savedAdminPassword?: string;
   lastMode?: "offline" | "online";
   busy?: boolean;
   error?: string | null;
   onlineConfigured: boolean;
+  adminPasswordSet?: boolean;
   onOffline: () => void;
-  onOnline: () => void;
+  onOnline: (url?: string) => void;
   onAdminToken?: (token: string | null) => void;
+  onSettingsSaved?: (state: {
+    savedRemoteUrl: string;
+    offlinePort: number;
+    onlineConfigured?: boolean;
+    adminPasswordSet?: boolean;
+    adminPassword?: string;
+  }) => void;
 }
 
 export default function DesktopGate({
+  savedRemoteUrl,
+  savedAdminPassword = "",
   lastMode = "offline",
   busy,
   error,
   onlineConfigured,
+  adminPasswordSet = false,
   onOffline,
   onOnline,
   onAdminToken,
+  onSettingsSaved,
 }: Props) {
   const [adminOpen, setAdminOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [adminError, setAdminError] = useState<string | null>(null);
   const [adminBusy, setAdminBusy] = useState(false);
-  const showOnline = onlineConfigured;
+  const [url, setUrl] = useState(savedRemoteUrl);
+  const [onlinePassword, setOnlinePassword] = useState(savedAdminPassword);
+  const [savingOnline, setSavingOnline] = useState(false);
+  const showOnline = onlineConfigured || url.trim().length > 0;
+
+  useEffect(() => {
+    setUrl(savedRemoteUrl);
+  }, [savedRemoteUrl]);
+
+  useEffect(() => {
+    if (savedAdminPassword) setOnlinePassword(savedAdminPassword);
+  }, [savedAdminPassword]);
+
+  const persistOnlineSettings = async (): Promise<boolean> => {
+    const desktop = window.steeldartDesktop;
+    if (!desktop?.saveSettings) return true;
+    const nextUrl = url.trim();
+    const nextPassword = onlinePassword.trim();
+    if (!nextUrl && !savedRemoteUrl) return true;
+    if (nextUrl === savedRemoteUrl.trim() && (!nextPassword || nextPassword === savedAdminPassword)) {
+      return true;
+    }
+    setSavingOnline(true);
+    const result = await desktop.saveSettings({
+      remoteUrl: nextUrl,
+      adminPassword: nextPassword || undefined,
+    });
+    setSavingOnline(false);
+    if (!result.ok) {
+      setAdminError(result.error);
+      return false;
+    }
+    onSettingsSaved?.({
+      savedRemoteUrl: result.state.savedRemoteUrl,
+      offlinePort: result.state.offlinePort,
+      onlineConfigured: result.state.onlineConfigured,
+      adminPasswordSet: result.state.adminPasswordSet,
+      adminPassword: result.state.adminPassword,
+    });
+    return true;
+  };
 
   const login = async () => {
     const desktop = window.steeldartDesktop;
@@ -45,6 +98,13 @@ export default function DesktopGate({
     onAdminToken?.(result.token);
     setPassword("");
     setAdminOpen(false);
+  };
+
+  const startOnline = async () => {
+    setAdminError(null);
+    const saved = await persistOnlineSettings();
+    if (!saved) return;
+    onOnline(url.trim() || savedRemoteUrl);
   };
 
   return (
@@ -68,21 +128,39 @@ export default function DesktopGate({
           </p>
         </button>
 
-        {showOnline && (
+        <div className="rounded-3xl border border-white/10 bg-ink-800 p-6 text-left">
+          <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Online</div>
+          <div className="mt-1 font-display text-3xl text-white">Webserver</div>
+          <p className="mt-2 text-sm text-slate-400">
+            Webserver-URL und Online-Passwort (Hostinger) einmal speichern — dasselbe Passwort öffnet den Raum.
+            {lastMode === "online" ? " Zuletzt Online genutzt." : ""}
+          </p>
+          <label className="mt-4 block text-sm text-slate-400">Webserver-URL</label>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://dart-counter.turniertool.eu"
+            autoComplete="url"
+            className="mt-1 min-h-touch w-full rounded-2xl bg-ink-950 px-4 outline-none ring-amber-glow/40 focus:ring"
+          />
+          <label className="mt-3 block text-sm text-slate-400">Online-Passwort</label>
+          <input
+            type="password"
+            value={onlinePassword}
+            onChange={(e) => setOnlinePassword(e.target.value)}
+            placeholder={adminPasswordSet || savedAdminPassword ? "gespeichert — ändern zum Überschreiben" : "STEELDART_ADMIN_PASSWORD"}
+            autoComplete="current-password"
+            className="mt-1 min-h-touch w-full rounded-2xl bg-ink-950 px-4 outline-none ring-amber-glow/40 focus:ring"
+          />
           <button
             type="button"
-            className="rounded-3xl border border-white/10 bg-ink-800 p-6 text-left disabled:opacity-60"
-            disabled={busy}
-            onClick={onOnline}
+            className="mt-4 min-h-touch w-full rounded-2xl bg-amber-glow font-bold text-ink-950 disabled:opacity-60"
+            disabled={busy || savingOnline || !url.trim()}
+            onClick={() => void startOnline()}
           >
-            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Online</div>
-            <div className="mt-1 font-display text-3xl text-white">Webserver</div>
-            <p className="mt-2 text-sm text-slate-400">
-              Verbindung zum konfigurierten Webserver. Öffnet automatisch einen Raum.
-              {lastMode === "online" ? " Zuletzt Online genutzt." : ""}
-            </p>
+            {showOnline ? "Online starten" : "Speichern und Online starten"}
           </button>
-        )}
+        </div>
       </div>
 
       {(error || adminError) && (
@@ -110,6 +188,7 @@ export default function DesktopGate({
             }}
           >
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Admin-Login</div>
+            <p className="mt-1 text-[11px] text-slate-500">Online-Passwort oder lokales Admin-Passwort.</p>
             <input
               type="password"
               value={password}

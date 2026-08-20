@@ -81,6 +81,7 @@ function desktopState() {
     boardId: prefs.boardId ?? "",
     boardName: prefs.boardName ?? "Scheibe 1",
     adminPasswordSet: Boolean(configuredAdminPassword(prefs)),
+    adminPassword: configuredAdminPassword(prefs) || "",
     adminToken: issuedAdminToken && adminTokenValid(issuedAdminToken) ? issuedAdminToken : null,
   };
 }
@@ -227,13 +228,14 @@ async function connectOnline(rawUrl?: string): Promise<DesktopSession> {
 
   await closeLocalStore();
   await shutdownOwnedServer();
-  const resume = freshOnlineResume(origin);
+  const prefs = loadPrefs();
+  const resume = freshOnlineResume(origin, prefs.boardId);
   session = {
     mode: "online",
     origin,
     lanUrls: [],
     resumeCode: resume?.roomCode,
-    adminPassword: configuredAdminPassword() || undefined,
+    adminPassword: configuredAdminPassword(prefs) || undefined,
   };
   savePrefs({ lastMode: "online", remoteUrl: origin });
   return session;
@@ -338,10 +340,11 @@ function registerIpc(): void {
     }
   });
 
-  ipcMain.handle("desktop:rememberOnline", (_evt, payload: { origin?: string; code?: string }) => {
+  ipcMain.handle("desktop:rememberOnline", (_evt, payload: { origin?: string; code?: string; boardId?: string }) => {
     const origin = String(payload?.origin ?? "");
     const code = String(payload?.code ?? "");
-    if (origin && code) rememberOnlineRoom(origin, code);
+    const boardId = loadPrefs().boardId ?? "";
+    if (origin && code && boardId) rememberOnlineRoom(origin, code, boardId);
   });
 
   ipcMain.handle("desktop:clearOnlineResume", () => {
@@ -359,13 +362,36 @@ function registerIpc(): void {
     return { ok: true as const };
   });
 
-  ipcMain.handle("desktop:adminLogin", (_evt, password: string) => {
-    if (!passwordsMatch(String(password ?? ""), getAdminPassword())) {
-      return { ok: false as const, error: "Falsches Passwort." };
+  ipcMain.handle("desktop:adminLogin", async (_evt, password: string) => {
+    const given = String(password ?? "").trim();
+    const stored = configuredAdminPassword();
+    const localOk =
+      passwordsMatch(given, getAdminPassword()) || (stored.length > 0 && passwordsMatch(given, stored));
+    if (localOk) {
+      const token = issueAdminToken();
+      issuedAdminToken = token;
+      return { ok: true as const, token };
     }
-    const token = issueAdminToken();
-    issuedAdminToken = token;
-    return { ok: true as const, token };
+    const origin = configuredRemoteUrl();
+    if (origin && given) {
+      try {
+        const res = await fetch(`${origin}/api/admin/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: given }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (res.ok) {
+          savePrefs({ adminPassword: given });
+          const token = issueAdminToken();
+          issuedAdminToken = token;
+          return { ok: true as const, token };
+        }
+      } catch {
+        /* remote unreachable — fall through */
+      }
+    }
+    return { ok: false as const, error: "Falsches Passwort." };
   });
 
   ipcMain.handle(
@@ -395,6 +421,7 @@ function registerIpc(): void {
       offlinePort: port,
       lastMode: remoteUrl ? prev.lastMode : "offline",
       onlineResume: remoteUrl ? prev.onlineResume : null,
+      onlineResumes: remoteUrl ? prev.onlineResumes : {},
       boardName: typeof patch?.boardName === "string" && patch.boardName.trim() ? patch.boardName.trim() : prev.boardName,
       adminPassword:
         typeof patch?.adminPassword === "string"

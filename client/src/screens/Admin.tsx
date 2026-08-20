@@ -198,6 +198,7 @@ interface Props {
   boardName?: string;
   desktopSettings: boolean;
   adminPasswordSet?: boolean;
+  savedAdminPassword?: string;
   onSettingsSaved?: (state: {
     savedRemoteUrl: string;
     offlinePort: number;
@@ -205,6 +206,7 @@ interface Props {
     boardId?: string;
     boardName?: string;
     adminPasswordSet?: boolean;
+    adminPassword?: string;
   }) => void;
   onLogout: () => void;
 }
@@ -220,6 +222,7 @@ export default function Admin({
   boardName = "Scheibe 1",
   desktopSettings,
   adminPasswordSet = false,
+  savedAdminPassword = "",
   onSettingsSaved,
   onLogout,
 }: Props) {
@@ -232,7 +235,7 @@ export default function Admin({
   const [csvText, setCsvText] = useState("");
   const [csvSummary, setCsvSummary] = useState<string | null>(null);
   const [url, setUrl] = useState(savedRemoteUrl);
-  const [adminPassword, setAdminPassword] = useState("");
+  const [adminPassword, setAdminPassword] = useState(savedAdminPassword);
   const [passwordSaved, setPasswordSaved] = useState(adminPasswordSet);
   const [port, setPort] = useState(String(offlinePort || 3000));
   const [boardLabel, setBoardLabel] = useState(boardName);
@@ -265,7 +268,8 @@ export default function Admin({
     setPort(String(offlinePort || 3000));
     setBoardLabel(boardName);
     setPasswordSaved(adminPasswordSet);
-  }, [savedRemoteUrl, offlinePort, boardName, adminPasswordSet]);
+    if (savedAdminPassword) setAdminPassword(savedAdminPassword);
+  }, [savedRemoteUrl, offlinePort, boardName, adminPasswordSet, savedAdminPassword]);
 
   const saveDesktop = async () => {
     if (!desktop?.saveSettings) return;
@@ -281,7 +285,7 @@ export default function Admin({
       setError(result.error);
       return;
     }
-    if (adminPassword.trim()) setAdminPassword("");
+    if (adminPassword.trim()) setAdminPassword(adminPassword.trim());
     setPasswordSaved(Boolean((result.state.adminPasswordSet ?? passwordSaved) || adminPassword.trim()));
     onSettingsSaved?.({
       savedRemoteUrl: result.state.savedRemoteUrl,
@@ -290,6 +294,7 @@ export default function Admin({
       boardId: result.state.boardId,
       boardName: result.state.boardName,
       adminPasswordSet: result.state.adminPasswordSet,
+      adminPassword: result.state.adminPassword,
     });
   };
 
@@ -318,27 +323,27 @@ export default function Admin({
       {desktopSettings && (
         <section className="mt-6 rounded-3xl bg-ink-800 p-5">
           <h2 className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Desktop-Einstellungen</h2>
-          <label className="mt-4 block text-sm text-slate-400">Online-Server-URL</label>
+          <label className="mt-4 block text-sm text-slate-400">Webserver-URL</label>
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://dart.example.com"
+            placeholder="https://dart-counter.turniertool.eu"
             className="mt-1 min-h-touch w-full rounded-2xl bg-ink-950 px-4 outline-none ring-amber-glow/40 focus:ring"
           />
           <p className="mt-2 text-xs text-slate-500">
             Ohne URL bleibt Online auf dem Startbildschirm verborgen. Leeres Feld löscht die URL.
           </p>
-          <label className="mt-4 block text-sm text-slate-400">Admin-Passwort (Webserver)</label>
+          <label className="mt-4 block text-sm text-slate-400">Online-Passwort</label>
           <input
             type="password"
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
-            placeholder={passwordSaved ? "gespeichert — neu eingeben zum Ändern" : "wie STEELDART_ADMIN_PASSWORD"}
+            placeholder={passwordSaved ? "gespeichert — neu eingeben zum Ändern" : "wie STEELDART_ADMIN_PASSWORD auf Hostinger"}
             autoComplete="new-password"
             className="mt-1 min-h-touch w-full rounded-2xl bg-ink-950 px-4 outline-none ring-amber-glow/40 focus:ring"
           />
           <p className="mt-2 text-xs text-slate-500">
-            Dasselbe Passwort wie auf Hostinger. Die Desktop-App eröffnet damit automatisch einen Raum.
+            Ein Passwort für Raum eröffnen und Admin. Wird gespeichert und bei Online automatisch mitgeschickt.
           </p>
           <label className="mt-4 block text-sm text-slate-400">Offline-Port</label>
           <input

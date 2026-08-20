@@ -89,10 +89,27 @@ class SqlJsDb implements MiniDb {
   }
 }
 
-export function defaultDbPath(): string {
+/** Hostinger wipes `hbuilds/versions/<uuid>/nodejs` on every deploy — persist next to the domain. */
+export function hostingerDataDir(cwd = process.cwd()): string | null {
+  let dir = path.resolve(cwd);
+  const { root } = path.parse(dir);
+  while (true) {
+    if (path.basename(dir).toLowerCase() === "hbuilds") {
+      return path.join(path.dirname(dir), "data");
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir || dir === root) break;
+    dir = parent;
+  }
+  return null;
+}
+
+export function defaultDbPath(cwd = process.cwd()): string {
   const fromEnv = process.env.STEELDART_DB;
   if (fromEnv && fromEnv.trim()) return fromEnv.trim();
-  return path.join(process.cwd(), "data", "steeldart.sqlite");
+  const hosted = hostingerDataDir(cwd);
+  if (hosted) return path.join(hosted, "steeldart.sqlite");
+  return path.join(cwd, "data", "steeldart.sqlite");
 }
 
 function bundledWasmPath(): string {
@@ -162,11 +179,18 @@ function preferSqlJs(): boolean {
 }
 
 let sqliteEngineLogged = false;
+let sqlitePathLogged = false;
 
 function logSqlJsOnce(): void {
   if (sqliteEngineLogged) return;
   sqliteEngineLogged = true;
   console.log("sqlite: sql.js (better-sqlite3 optional — erwartet auf Hostinger)");
+}
+
+function logDbPathOnce(filePath: string): void {
+  if (sqlitePathLogged) return;
+  sqlitePathLogged = true;
+  console.log(`sqlite file: ${filePath}`);
 }
 
 function tryOpenBetterSqlite(filePath: string): MiniDb | null {
@@ -199,6 +223,7 @@ function ensureWritableDbPath(filePath: string): string {
 
 export async function openMiniDb(filePath: string): Promise<MiniDb> {
   filePath = ensureWritableDbPath(filePath);
+  logDbPathOnce(filePath);
 
   const native = tryOpenBetterSqlite(filePath);
   if (native) return native;

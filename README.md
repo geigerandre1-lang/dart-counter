@@ -11,7 +11,7 @@ Beim Start wählst du den Modus:
 | Desktop-Modus | Was passiert |
 | --- | --- |
 | **Offline** | Die App startet einen lokalen Server. Handys öffnen die LAN-IP oder scannen den **QR-Code**. Alle landen im **einen** lokalen Spiel, ohne Raum-ID. Schließen speichert den Stand 2 Stunden; LAN-Beitritt geht nur bei laufender App. |
-| **Online** | Kein lokaler Spielserver. Verbindung zum Node-Webserver. Raum bleibt 2h nach letzter Aktion (auch ohne Desktop). Beim erneuten Start innerhalb von 2 Stunden: gleicher Raum. |
+| **Online** | Kein lokaler Spielserver. Verbindung zum Node-Webserver. **Jede Anlage bekommt einen eigenen Raum.** Raum bleibt 2h nach letzter Aktion (auch ohne Desktop). Dieselbe Anlage innerhalb von 2 Stunden: gleicher Raum; sonst neuer Code. Die Website `/` tritt nicht von allein bei. |
 
 Unter Windows: maximiertes App-Fenster, F11 Vollbild, Escape beendet Vollbild. Auf dem Pi (Linux): Kiosk/Vollbild.
 
@@ -159,11 +159,21 @@ STEELDART_MODE=online
 STEELDART_ADMIN_PASSWORD=dein-geheimes-passwort
 ```
 
-`PORT` nicht von Hand setzen. Optional: `STEELDART_SQLJS=1` (sql.js erzwingen, Native-SQLite gar nicht laden), `STEELDART_DB=/pfad/zur/datei.sqlite`.
+`PORT` nicht von Hand setzen. Optional: `STEELDART_SQLJS=1` (sql.js erzwingen, Native-SQLite gar nicht laden).
+
+**SQLite-Datei (Hostinger):** Jedes Redeploy löscht `hbuilds/versions/<uuid>/nodejs/`. Die App legt die Datenbank deshalb **nicht** dort ab. Wenn `cwd` `hbuilds` enthält, wird automatisch
+
+`…/domains/dart-counter.turniertool.eu/data/steeldart.sqlite`
+
+genutzt (vom cwd nach oben bis zum Ordner `hbuilds`, dann dessen Parent + `data/`). Alternativ **`STEELDART_DB` auf einen absoluten Pfad außerhalb von `versions/` setzen** (empfohlen, dann gilt nur dieser Wert). Der Start loggt den verwendeten Pfad einmal (`sqlite file: …`). sql.js schreibt bei jeder Änderung in diese Datei.
+
+```bash
+STEELDART_DB=/home/…/domains/dart-counter.turniertool.eu/data/steeldart.sqlite
+```
 
 Kein `--omit=dev` beim Install: der Build braucht Vite und esbuild (`devDependencies`). Volles `npm install` ist korrekt.
 
-Standardbesucher sehen nur **Raum-ID eingeben** (kein Passwort). Optional: QR-Link `https://<server>/?raum=CODE` tritt automatisch bei.
+Die öffentliche Website `/` bleibt auf **Raum-ID eingeben**, bis jemand eine ID eintippt oder Admin einen Raum eröffnet. Browser **treten nicht automatisch** dem letzten/aktuellen Spiel bei (kein LOCAL, kein „letzter Raum“). Snapshots gehen nur an Sockets nach `joinRoom` / `createRoom`. Optional: QR-Link `https://<server>/?raum=CODE` tritt gezielt diesem Raum bei. `/api/info` liefert im Online-Modus keine LAN-URLs mit internem Port — die Website bleibt same-origin (kein `:3000`).
 
 ### Live-Monitor `/monitor`
 
@@ -188,11 +198,13 @@ npm start
 
 Ohne gesetzte Variable nutzt der Server den im Code hinterlegten Fallback — **in Produktion immer `STEELDART_ADMIN_PASSWORD` setzen**. Das UI-Login reicht nicht: `createRoom` prüft Passwort oder Admin-Token erneut.
 
+**Desktop:** Unter Admin bzw. auf dem Startbildschirm **Webserver-URL** und **Online-Passwort** (dasselbe wie `STEELDART_ADMIN_PASSWORD`) speichern. Online starten schickt dieses Passwort an `createRoom` — kein zweites Login mit dem lokalen Fallback (`Admin17`) nötig. Dasselbe Online-Passwort kann auch den Desktop-Admin (Teams, Statistik) entsperren.
+
 Maximal **4 Räume gleichzeitig**; der 5. Versuch wird auf Deutsch abgelehnt. Beitreten per ID zählt nicht als Admin und braucht kein Passwort.
 
 Leere Online-Räume bleiben **2 Stunden nach der letzten Aktion** bestehen (auch ohne Desktop-Client). Jede Aktion eines Web-Clients setzt den Timer zurück. Danach räumt der Server den Raum auf. Die 4-Räume-Grenze zählt diese gepufferten Räume mit.
 
-**Desktop Online:** Beim erneuten Start innerhalb von 2 Stunden verbindet die App denselben Webserver und dieselbe Raum-ID (lokal gespeichert). Web-Clients können in der Zwischenzeit weiterzählen.
+**Desktop Online:** Jede Anlage (eindeutige Board-ID + Name) eröffnet einen **eigenen Raum**. Gespeichert wird `{ serverUrl, roomCode, boardId }` pro Board, nicht global. Beim erneuten Start derselben Anlage innerhalb von 2 Stunden (gleicher Server): dieser Raum. Sonst immer `createRoom` mit neuem Code — nie der Raum einer anderen Anlage. Zwei Desktops → zwei Raum-IDs; Web-Spieler wählen die ID, `/monitor` zeigt beide Scheiben.
 
 **Desktop Offline:** Beim Beenden wird der Spielstand auf die Platte geschrieben. LAN-Beitritt geht nur, solange die App läuft. Beim nächsten Offline-Start innerhalb von 2 Stunden erscheint *„Laufendes Spiel fortsetzen?“* oder *„Neuen Raum erstellen“*.
 

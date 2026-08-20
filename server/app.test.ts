@@ -341,8 +341,9 @@ describe("STEELDART_MODE", () => {
         expect(typeof started.app).toBe("function");
         const info = await fetch(`http://127.0.0.1:${started.port}/api/info`);
         expect(info.ok).toBe(true);
-        const body = (await info.json()) as { mode?: string };
+        const body = (await info.json()) as { mode?: string; lanUrls?: string[] };
         expect(body.mode).toBe("online");
+        expect(body.lanUrls).toEqual([]);
       } finally {
         await started.close();
       }
@@ -471,6 +472,86 @@ describe("primary boot singleton", () => {
       else process.env.STEELDART_DB = prevDb;
       if (prevHost == null) delete process.env.HOST;
       else process.env.HOST = prevHost;
+    }
+  });
+});
+
+describe("online rooms stay isolated", () => {
+  it("does not send snapshots to sockets that never joined, and createRoom always allocates a new code", async () => {
+    const started = await startServer({
+      port: 39331,
+      host: "127.0.0.1",
+      mode: "online",
+      dbPath: tmpDb(),
+      publicDir: null,
+    });
+    const sockets: WebSocket[] = [];
+    try {
+      const spectator = await openWs(started.port);
+      sockets.push(spectator);
+      const leaked: unknown[] = [];
+      spectator.on("message", (raw) => leaked.push(JSON.parse(String(raw))));
+
+      const host1 = await openWs(started.port);
+      sockets.push(host1);
+      const created1 = waitType(host1, "snapshot");
+      host1.send(
+        JSON.stringify({
+          type: "createRoom",
+          mode: "online",
+          password: getAdminPassword(),
+          boardId: "board-1",
+          boardName: "Scheibe 1",
+        }),
+      );
+      const snap1 = (await created1) as { snapshot?: { code?: string; lanUrls?: string[] } };
+      const code1 = snap1.snapshot?.code;
+      expect(code1).toBeTruthy();
+      expect(snap1.snapshot?.lanUrls).toEqual([]);
+
+      const startedSnap = waitType(host1, "snapshot");
+      host1.send(JSON.stringify({ type: "startMatch", boardId: "board-1", boardName: "Scheibe 1" }));
+      await startedSnap;
+
+      const host2 = await openWs(started.port);
+      sockets.push(host2);
+      const created2 = waitType(host2, "snapshot");
+      host2.send(
+        JSON.stringify({
+          type: "createRoom",
+          mode: "online",
+          password: getAdminPassword(),
+          boardId: "board-2",
+          boardName: "Scheibe 2",
+        }),
+      );
+      const snap2 = (await created2) as { snapshot?: { code?: string } };
+      expect(snap2.snapshot?.code).toBeTruthy();
+      expect(snap2.snapshot?.code).not.toBe(code1);
+
+      await new Promise((r) => setTimeout(r, 250));
+      expect(leaked).toEqual([]);
+
+      spectator.send(JSON.stringify({ type: "joinRoom", code: code1 }));
+      const joined = (await waitType(spectator, "snapshot")) as { snapshot?: { code?: string } };
+      expect(joined.snapshot?.code).toBe(code1);
+      const afterJoin = leaked.length;
+      spectator.send(JSON.stringify({ type: "leaveRoom" }));
+      await new Promise((r) => setTimeout(r, 50));
+      const hostBack = waitType(host1, "snapshot");
+      host1.send(JSON.stringify({ type: "toSetup" }));
+      await hostBack;
+      await new Promise((r) => setTimeout(r, 200));
+      expect(leaked.length).toBe(afterJoin);
+    } finally {
+      for (const socket of sockets) {
+        try {
+          socket.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      await started.close();
     }
   });
 });

@@ -71,7 +71,14 @@ export {
   parseRoomCodeFromHref,
   preferLanUrl,
 } from "./joinLink.js";
-export { ROOM_IDLE_MS, isFresh } from "./persist.js";
+export {
+  ROOM_IDLE_MS,
+  isFresh,
+  normalizeServerUrlKey,
+  pickBoardResume,
+  resumeMatchesBoard,
+  storeBoardResume,
+} from "./persist.js";
 export type { LocalSave, OnlineResume } from "./persist.js";
 export {
   AVERAGE_RULE_DE,

@@ -38,6 +38,7 @@ export type WsClientMessage =
       boardName?: string;
     }
   | { type: "joinRoom"; code: string }
+  | { type: "leaveRoom" }
   | { type: "updateConfig"; config: MatchConfig }
   | { type: "startMatch"; boardId?: string; boardName?: string }
   | { type: "toSetup" }

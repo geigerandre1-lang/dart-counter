@@ -2,12 +2,15 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openMiniDb } from "./sqlite.js";
+import { defaultDbPath, hostingerDataDir, openMiniDb } from "./sqlite.js";
 
 const dirs: string[] = [];
+const prevDb = process.env.STEELDART_DB;
 
 afterEach(() => {
   delete process.env.STEELDART_SQLJS;
+  if (prevDb == null) delete process.env.STEELDART_DB;
+  else process.env.STEELDART_DB = prevDb;
   while (dirs.length) {
     const dir = dirs.pop();
     if (dir) rmSync(dir, { recursive: true, force: true });
@@ -54,5 +57,28 @@ describe("sql.js fallback", () => {
     const reopened = await openMiniDb(file);
     expect(reopened.get<{ id: number }>("SELECT id FROM t")?.id).toBe(3);
     reopened.close();
+  });
+});
+
+describe("default sqlite path", () => {
+  it("honors STEELDART_DB over cwd", () => {
+    process.env.STEELDART_DB = "/abs/outside/versions/steeldart.sqlite";
+    const cwd = path.join(tmpdir(), "domains", "site", "hbuilds", "versions", "abc", "nodejs");
+    expect(defaultDbPath(cwd)).toBe("/abs/outside/versions/steeldart.sqlite");
+  });
+
+  it("stores next to the domain when cwd is under hbuilds/versions", () => {
+    delete process.env.STEELDART_DB;
+    const domainRoot = path.join(tmpdir(), "domains", "dart-counter.turniertool.eu");
+    const cwd = path.join(domainRoot, "hbuilds", "versions", "uuid-here", "nodejs");
+    expect(hostingerDataDir(cwd)).toBe(path.join(domainRoot, "data"));
+    expect(defaultDbPath(cwd)).toBe(path.join(domainRoot, "data", "steeldart.sqlite"));
+  });
+
+  it("uses cwd/data when not on Hostinger", () => {
+    delete process.env.STEELDART_DB;
+    const cwd = path.join(tmpdir(), "opt", "steeldart");
+    expect(defaultDbPath(cwd)).toBe(path.join(cwd, "data", "steeldart.sqlite"));
+    expect(hostingerDataDir(cwd)).toBeNull();
   });
 });

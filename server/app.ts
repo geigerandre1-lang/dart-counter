@@ -215,23 +215,23 @@ function send(ws: WebSocket, data: unknown): void {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
 }
 
-function snapshotFor(room: Room, clientId: string, port: number): RoomSnapshot {
+function snapshotFor(room: Room, clientId: string, port: number, deployMode: DeployMode): RoomSnapshot {
   return {
     code: room.code,
     mode: room.mode,
     phase: room.match ? "match" : "setup",
     config: room.config,
     match: room.match,
-    lanUrls: lanUrls(port),
+    lanUrls: deployMode === "online" ? [] : lanUrls(port),
     clientId,
     isHost: clientId === room.hostClientId,
   };
 }
 
-function broadcast(room: Room, port: number): void {
+function broadcast(room: Room, port: number, deployMode: DeployMode): void {
   touch(room);
   for (const [client, clientId] of room.clients) {
-    send(client, { type: "snapshot", snapshot: snapshotFor(room, clientId, port) });
+    send(client, { type: "snapshot", snapshot: snapshotFor(room, clientId, port, deployMode) });
   }
 }
 
@@ -317,7 +317,9 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
     `bind=${runtime.port}`,
   );
   const persistPath = options.persistPath ?? null;
-  const store = await openStatsStore(options.dbPath ?? defaultDbPath());
+  const dbFile = options.dbPath ?? defaultDbPath();
+  bootLog(`sqlite ${dbFile}`);
+  const store = await openStatsStore(dbFile);
 
   const rooms = new Map<string, Room>();
   const app = express();
@@ -379,7 +381,8 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
       app: STEELDART_APP,
       mode: DEPLOY_MODE,
       port: runtime.port,
-      lanUrls: lanUrls(runtime.port),
+      // Online/hosted: never advertise LAN :3000 — browsers stay same-origin.
+      lanUrls: DEPLOY_MODE === "online" ? [] : lanUrls(runtime.port),
       roomCount: DEPLOY_MODE === "online" ? rooms.size : 1,
       maxRooms: DEPLOY_MODE === "online" ? MAX_ONLINE_ROOMS : 1,
     });
@@ -736,7 +739,7 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
     const hostConnected = [...room.clients.values()].includes(room.hostClientId ?? "");
     if (!room.hostClientId || !hostConnected) room.hostClientId = clientId;
     room.lastActive = Date.now();
-    send(ws, { type: "snapshot", snapshot: snapshotFor(room, clientId, runtime.port) });
+    send(ws, { type: "snapshot", snapshot: snapshotFor(room, clientId, runtime.port, DEPLOY_MODE) });
     return room;
   }
 
@@ -752,6 +755,7 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
     let joined: Room | null = null;
     const clientId = randomUUID();
 
+    // Online: no snapshot until this socket createRoom/joinRoom. Never auto-join LOCAL or the latest room.
     if (DEPLOY_MODE === "offline") {
       joined = attach(ws, clientId, ensureLocalRoom(), null);
     }
@@ -781,6 +785,7 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
             send(ws, { type: "error", message: cap });
             return;
           }
+          // Always a new code — never reuse another board's room, even if boardId matches.
           const code = generateCode(rooms);
           const incoming = msg.config ?? createDefaultConfig();
           const needsRoster = !incoming.players?.length || incoming.players.every((p) => !p.id);
@@ -808,13 +813,27 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
             joined = attach(ws, clientId, ensureLocalRoom(), joined);
             return;
           }
-          const code = msg.code.trim().toUpperCase();
+          const code = String(msg.code ?? "")
+            .trim()
+            .toUpperCase();
+          if (!code || code === LOCAL_CODE) {
+            send(ws, { type: "error", message: "Raum nicht gefunden." });
+            return;
+          }
           const room = rooms.get(code);
           if (!room) {
             send(ws, { type: "error", message: "Raum nicht gefunden." });
             return;
           }
           joined = attach(ws, clientId, room, joined);
+          return;
+        }
+
+        if (msg.type === "leaveRoom") {
+          if (joined) {
+            joined.clients.delete(ws);
+            joined = null;
+          }
           return;
         }
 
@@ -829,7 +848,7 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
             return;
           }
           joined.config = normalizeConfig(msg.config);
-          broadcast(joined, runtime.port);
+          broadcast(joined, runtime.port, DEPLOY_MODE);
           persistLocal();
           return;
         }
@@ -845,7 +864,7 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
           });
           joined.match = createMatch(joined.config);
           attachSpieltag(joined);
-          broadcast(joined, runtime.port);
+          broadcast(joined, runtime.port, DEPLOY_MODE);
           persistLocal();
           return;
         }
@@ -853,7 +872,7 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
         if (msg.type === "toSetup") {
           finalizeMatch(joined.match, joined);
           joined.match = null;
-          broadcast(joined, runtime.port);
+          broadcast(joined, runtime.port, DEPLOY_MODE);
           persistLocal();
           return;
         }
@@ -875,14 +894,14 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
             send(ws, { type: "error", message: result.error });
             touch(joined);
             persistLocal();
-            send(ws, { type: "snapshot", snapshot: snapshotFor(joined, clientId, runtime.port) });
+            send(ws, { type: "snapshot", snapshot: snapshotFor(joined, clientId, runtime.port, DEPLOY_MODE) });
             return;
           }
           if (action.type === "REMATCH" && prev.status === "matchOver") {
             finalizeMatch(prev, joined);
           }
           joined.match = result.state;
-          broadcast(joined, runtime.port);
+          broadcast(joined, runtime.port, DEPLOY_MODE);
           persistLocal();
         }
       } catch (err) {

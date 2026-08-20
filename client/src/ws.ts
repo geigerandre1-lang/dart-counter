@@ -1,7 +1,5 @@
 import type { RoomSnapshot, WsClientMessage, WsServerMessage } from "@shared/index";
 
-const ROOM_KEY = "dart-counter-room";
-
 export function wsUrl(origin?: string): string {
   if (origin) {
     const url = new URL(origin);
@@ -23,6 +21,7 @@ export class RoomSocket {
   private origin: string | undefined;
   /** When true (Pi/offline), never rejoin a stored room code — the server auto-joins LOCAL. */
   offline = false;
+  /** Only join this code after an explicit join/create or a ?raum= link — never localStorage. */
   pendingJoin: string | null = null;
   onSnapshot: (snap: RoomSnapshot) => void = () => undefined;
   onError: (message: string) => void = () => undefined;
@@ -47,17 +46,13 @@ export class RoomSocket {
       if (this.offline) return;
       if (this.pendingJoin) {
         socket.send(JSON.stringify({ type: "joinRoom", code: this.pendingJoin }));
-        return;
       }
-      const code = localStorage.getItem(ROOM_KEY);
-      if (code && code !== "LOCAL") socket.send(JSON.stringify({ type: "joinRoom", code }));
     };
 
     socket.onmessage = (ev) => {
       const msg = JSON.parse(String(ev.data)) as WsServerMessage;
       if (msg.type === "snapshot") {
-        if (msg.snapshot.mode === "online") localStorage.setItem(ROOM_KEY, msg.snapshot.code);
-        else localStorage.removeItem(ROOM_KEY);
+        this.pendingJoin = msg.snapshot.code;
         this.onSnapshot(msg.snapshot);
       } else if (msg.type === "error") {
         this.onError(msg.message);
@@ -74,6 +69,8 @@ export class RoomSocket {
   }
 
   send(msg: WsClientMessage): void {
+    if (msg.type === "joinRoom") this.pendingJoin = msg.code;
+    if (msg.type === "leaveRoom") this.pendingJoin = null;
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
     } else {
@@ -82,8 +79,7 @@ export class RoomSocket {
   }
 
   remember(code: string | null): void {
-    if (code) localStorage.setItem(ROOM_KEY, code);
-    else localStorage.removeItem(ROOM_KEY);
+    this.pendingJoin = code;
   }
 
   disconnect(): void {
