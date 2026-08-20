@@ -8,7 +8,8 @@ const tokens = new Map<string, number>();
 
 export function getAdminPassword(): string {
   const fromEnv = process.env.STEELDART_ADMIN_PASSWORD;
-  return fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_ADMIN_PASSWORD;
+  const trimmed = fromEnv == null ? "" : String(fromEnv).trim();
+  return trimmed.length > 0 ? trimmed : DEFAULT_ADMIN_PASSWORD;
 }
 
 export function passwordsMatch(given: string | undefined, expected: string): boolean {

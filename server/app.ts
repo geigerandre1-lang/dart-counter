@@ -4,7 +4,7 @@ import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import express, { type Request, type Response } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   applyAction,
@@ -45,6 +45,19 @@ export type DeployMode = "offline" | "online";
 
 export { STEELDART_APP };
 const PORT_FALLBACKS = 10;
+
+export function deployModeFromEnv(raw: string | undefined = process.env.STEELDART_MODE): DeployMode {
+  return String(raw ?? "").trim().toLowerCase() === "online" ? "online" : "offline";
+}
+
+function bootLog(...args: unknown[]): void {
+  const line = `[${new Date().toISOString()}] ${args.map((a) => String(a)).join(" ")}`;
+  try {
+    fs.writeSync(1, `${line}\n`);
+  } catch {
+    console.log(line);
+  }
+}
 
 function tcpPortOpen(port: number): Promise<boolean> {
   return new Promise((resolve) => {
@@ -139,6 +152,7 @@ export interface StartServerOptions {
 }
 
 export interface StartedServer {
+  app: Express;
   server: http.Server;
   port: number;
   host: string;
@@ -259,8 +273,15 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   const pinnedEnvPort = options.port == null ? envPort() : undefined;
   const runtime = { port: options.port ?? pinnedEnvPort ?? 3000 };
   const HOST = options.host ?? process.env.HOST ?? "0.0.0.0";
-  const DEPLOY_MODE: DeployMode =
-    options.mode ?? (process.env.STEELDART_MODE === "online" ? "online" : "offline");
+  const DEPLOY_MODE: DeployMode = options.mode ?? deployModeFromEnv();
+  bootLog(
+    "steeldart startServer",
+    `mode=${DEPLOY_MODE}`,
+    `PORT=${process.env.PORT ?? ""}`,
+    `APP_PORT=${process.env.APP_PORT ?? ""}`,
+    `HOST=${HOST}`,
+    `hop=${pinnedEnvPort == null}`,
+  );
   const persistPath = options.persistPath ?? null;
   const store = await openStatsStore(options.dbPath ?? defaultDbPath());
 
@@ -861,7 +882,10 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   cleanupTimer.unref();
 
   try {
-    if (pinnedEnvPort != null) {
+    if (server.listening) {
+      const addr = server.address();
+      if (addr && typeof addr === "object") runtime.port = addr.port;
+    } else if (pinnedEnvPort != null) {
       await bindPort(server, HOST, pinnedEnvPort, false);
       runtime.port = pinnedEnvPort;
     } else {
@@ -880,11 +904,11 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 
   const urls = lanUrls(runtime.port);
   const listenUrl = `http://${HOST}:${runtime.port}`;
-  console.log(`listening ${listenUrl}`);
-  console.log(
+  bootLog(`listening ${listenUrl}`);
+  bootLog(
     `bind PORT=${process.env.PORT ?? ""} APP_PORT=${process.env.APP_PORT ?? ""} HOST=${HOST} hop=${pinnedEnvPort == null}`,
   );
-  console.log(`Steeldart Dart-Counter (${DEPLOY_MODE}) auf ${listenUrl}`);
+  bootLog(`Steeldart Dart-Counter (${DEPLOY_MODE}) auf ${listenUrl}`);
   if (DEPLOY_MODE === "offline") {
     console.log("  Offline: Geräte die die IP öffnen, landen im lokalen Spiel.");
   } else {
@@ -917,5 +941,5 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       setTimeout(finish, 2500);
     });
 
-  return { server, port: runtime.port, host: HOST, mode: DEPLOY_MODE, lanUrls: urls, store, close };
+  return { app, server, port: runtime.port, host: HOST, mode: DEPLOY_MODE, lanUrls: urls, store, close };
 }

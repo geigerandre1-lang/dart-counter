@@ -29,4 +29,16 @@ describe("admin auth", () => {
     expect(roomCapError(3)).toBeNull();
     expect(roomCapError(4)).toMatch(/bereits 4 Räume/);
   });
+
+  it("trims STEELDART_ADMIN_PASSWORD from the environment", () => {
+    const prev = process.env.STEELDART_ADMIN_PASSWORD;
+    process.env.STEELDART_ADMIN_PASSWORD = "  HostingerSecret  ";
+    try {
+      expect(getAdminPassword()).toBe("HostingerSecret");
+      expect(passwordsMatch("HostingerSecret", getAdminPassword())).toBe(true);
+    } finally {
+      if (prev == null) delete process.env.STEELDART_ADMIN_PASSWORD;
+      else process.env.STEELDART_ADMIN_PASSWORD = prev;
+    }
+  });
 });

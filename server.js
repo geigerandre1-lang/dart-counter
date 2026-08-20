@@ -1,19 +1,16 @@
 /**
- * Hostinger CJS wrapper. Panel field: Application startup file = server.js
- * Dynamic import() is valid in CommonJS and in this ESM package (`node server.js`).
+ * ESM shim. Hostinger Express that require()s this file will crash with
+ * ERR_REQUIRE_ESM because package.json has "type": "module".
+ * Panel field "Eingabedatei" = server.cjs
  */
-"use strict";
+import fs from "node:fs";
+import { createRequire } from "node:module";
 
-process.on("uncaughtException", function (err) {
-  console.error("uncaughtException", err && err.stack ? err.stack : err);
-});
-process.on("unhandledRejection", function (err) {
-  console.error("unhandledRejection", err && err.stack ? err.stack : err);
-});
+try {
+  fs.writeSync(1, "steeldart starting\n");
+} catch {
+  console.log("steeldart starting");
+}
 
-console.log("Hostinger-Start: server.js -> app.js");
-
-import("./app.js").catch(function (err) {
-  console.error("uncaughtException", err && err.stack ? err.stack : err);
-  process.exit(1);
-});
+const require = createRequire(import.meta.url);
+export default await require("./server.cjs");

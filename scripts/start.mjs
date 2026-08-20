@@ -1,7 +1,9 @@
+import { createRequire } from "node:module";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 process.chdir(root);
 
-await import(pathToFileURL(path.join(root, "app.js")).href);
+const require = createRequire(path.join(root, "package.json"));
+await require(path.join(root, "server.cjs"));

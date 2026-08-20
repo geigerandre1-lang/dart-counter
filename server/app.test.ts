@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { STEELDART_APP, startServer } from "./app.js";
+import { STEELDART_APP, deployModeFromEnv, startServer } from "./app.js";
 import { getAdminPassword, issueAdminToken } from "./admin.js";
 import { openStatsStore } from "./store.js";
 
@@ -245,6 +246,44 @@ describe("player create API", () => {
   });
 });
 
+describe("STEELDART_MODE", () => {
+  it("treats ONLINE / Online / online as online (trim, case-insensitive)", () => {
+    expect(deployModeFromEnv("ONLINE")).toBe("online");
+    expect(deployModeFromEnv("Online")).toBe("online");
+    expect(deployModeFromEnv("online")).toBe("online");
+    expect(deployModeFromEnv("  ONLINE  ")).toBe("online");
+    expect(deployModeFromEnv("offline")).toBe("offline");
+    expect(deployModeFromEnv("OFFLINE")).toBe("offline");
+    expect(deployModeFromEnv("")).toBe("offline");
+    expect(deployModeFromEnv(undefined)).toBe("offline");
+  });
+
+  it("starts in online mode when env is ONLINE", async () => {
+    const prev = process.env.STEELDART_MODE;
+    process.env.STEELDART_MODE = "ONLINE";
+    try {
+      const started = await startServer({
+        host: "127.0.0.1",
+        dbPath: tmpDb(),
+        publicDir: null,
+      });
+      try {
+        expect(started.mode).toBe("online");
+        expect(typeof started.app).toBe("function");
+        const info = await fetch(`http://127.0.0.1:${started.port}/api/info`);
+        expect(info.ok).toBe(true);
+        const body = (await info.json()) as { mode?: string };
+        expect(body.mode).toBe("online");
+      } finally {
+        await started.close();
+      }
+    } finally {
+      if (prev == null) delete process.env.STEELDART_MODE;
+      else process.env.STEELDART_MODE = prev;
+    }
+  });
+});
+
 describe("Hostinger PORT bind", () => {
   it("listens on process.env.PORT exactly", async () => {
     const prev = process.env.PORT;
@@ -302,5 +341,14 @@ describe("Hostinger PORT bind", () => {
       if (prevApp == null) delete process.env.APP_PORT;
       else process.env.APP_PORT = prevApp;
     }
+  });
+});
+
+describe("Hostinger CJS entry", () => {
+  it("server.cjs is require-safe CommonJS", () => {
+    const src = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "server.cjs"), "utf8");
+    expect(src).toContain("steeldart starting");
+    expect(src).toContain("module.exports");
+    expect(src).not.toMatch(/^import\s/m);
   });
 });

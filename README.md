@@ -118,23 +118,23 @@ npm run build
 npm start
 ```
 
-`npm start` startet **sofort** `app.js` → `dist/server.js` (kein Vite zur Laufzeit, wenn `dist/` schon da ist). Fehlt `dist/`, baut der Start **einmal** mit Vite + esbuild und kopiert `sql-wasm.wasm`.
+`npm start` startet **sofort** `server.cjs` → `dist/server.cjs` (kein Vite zur Laufzeit, wenn `dist/client` schon da ist). Fehlt das Client-Build, baut der Start **einmal** mit Vite. Der Server-Bundle wird beim Start mit esbuild erzeugt/aktualisiert; `sql-wasm.wasm` wird kopiert.
 
-### Hostinger (Node.js)
+### Hostinger (Node.js, Express-Preset)
 
-Startup file `server.js` **or** `app.js`. Build command optional if start self-builds.
+**Eingabedatei / Startdatei: `server.cjs`** — nicht `app.js`. Das Express-Preset macht oft `require(entry)`. `package.json` hat `"type": "module"`, deshalb stirbt `require("app.js")` sofort mit `ERR_REQUIRE_ESM` und **leeren Runtime-Logs** (503). `server.cjs` ist echtes CommonJS: `node server.cjs` und `require("./server.cjs")` funktionieren. `app.js` bleibt ein ESM-Re-Export für lokales `node app.js`.
 
 | Panel-Feld | Wert |
 | --- | --- |
 | Node.js-Version | **18** (oder höher) |
 | **Anwendungsroot** | Ordner des Git-Repos (nicht `public_html`) |
-| **Startdatei der Anwendung** | `server.js` oder `app.js` (nicht `dist/electron.cjs`) |
+| **Eingabedatei / Startdatei der Anwendung** | **`server.cjs`** (nicht `app.js`, nicht `dist/electron.cjs`) |
 | **Build-Befehl** | leer lassen, oder optional `npm run build:web` |
 | **Start-Befehl** | nur falls extra nötig: `npm start` |
-| **STEELDART_MODE** | `online` |
+| **STEELDART_MODE** | `online` (auch `ONLINE` / `Online` — Vergleich ist case-insensitive) |
 | **PORT** | **nicht setzen** — das Panel injiziert den Port |
 
-Die Domain `dart-counter.turniertool.eu` muss **dieser Node-App** zugeordnet sein. `package.json` `"main"` ist `app.js`. Nach Git-Pull **Redeploy** und Status **Running**.
+Die Domain `dart-counter.turniertool.eu` muss **dieser Node-App** zugeordnet sein. `package.json` `"main"` ist `server.cjs`. Nach Git-Pull **Redeploy** und Status **Running**.
 
 Der Server bindet `process.env.PORT` (sonst `APP_PORT`, sonst 3000) auf `0.0.0.0`. Kein Port-Hopping wenn `PORT` gesetzt ist. `better-sqlite3` darf fehlen — Fallback ist sql.js (`dist/sql-wasm.wasm` oder `node_modules/sql.js`).
 
