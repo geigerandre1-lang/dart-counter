@@ -26,7 +26,9 @@ npm run desktop
 
 ## Portable Windows-App (ohne Installer)
 
-Auf einem Windows-PC mit Node.js 18+:
+Jeder Push auf `master` baut die portable `.exe` in **GitHub Actions**. Download: Repo → **Actions** → letzter erfolgreicher Lauf **Portable Windows EXE** → **Artifacts** → `steeldart-counter-win-portable`. Bei Tags landet die Datei zusätzlich am GitHub Release.
+
+Lokal (Windows, Node 18+):
 
 ```powershell
 npm install
@@ -35,7 +37,7 @@ npm run dist:win
 
 Ergebnis unter `release/`: eine portable `.exe` (x64), z. B. `steeldart-counter-1.0.0-win-x64.exe`. Die Datei irgendwohin kopieren und doppelklicken — **kein Setup, keine Installation**.
 
-Binaries gehören **nicht** ins Git (`release/` und `dist/` stehen in `.gitignore`). Fertige Dateien kommen in GitHub Releases, sofern sie nicht zu groß sind; sonst lokal mit `npm run dist:win` bauen.
+Binaries gehören **nicht** ins Git (`release/` und `dist/` stehen in `.gitignore`). Nicht die `.exe` committen.
 
 ## Raspberry Pi OS (64-Bit, Pi 4/5)
 

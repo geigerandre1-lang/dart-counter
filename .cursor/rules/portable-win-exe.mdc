@@ -1,0 +1,11 @@
+---
+description: Rebuild the Windows portable EXE after app changes; never commit the binary.
+alwaysApply: true
+---
+
+# Portable Windows EXE
+
+After shipping app code changes, rebuild locally with `npm run dist:win`.
+
+- Output is `release/*.exe` (~100MB). **Do not commit it** (`release/` is gitignored).
+- CI on `master` (`.github/workflows/portable-win.yml`) uploads the same exe as a GitHub Actions artifact. Do not kill a `dist:win` already running in another terminal.
