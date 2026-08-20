@@ -19,7 +19,7 @@ if [ -x "./release/linux-armv7l/steeldart-counter" ]; then
   exec ./release/linux-armv7l/steeldart-counter
 fi
 if [ -x "./node_modules/.bin/electron" ]; then
-  exec ./node_modules/.bin/electron .
+  exec ./node_modules/.bin/electron dist/electron.cjs
 fi
 
 echo "Weder gepackte Electron-Binary noch node_modules/.bin/electron gefunden." >&2

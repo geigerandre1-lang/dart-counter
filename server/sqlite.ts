@@ -127,6 +127,35 @@ function resolveSqlJsWasm(): string {
   return candidates[candidates.length - 1] ?? path.join(process.cwd(), "dist", "sql-wasm.wasm");
 }
 
+function sqlJsLocateFile(file: string, wasmFile: string): string {
+  const candidates = [
+    path.join(process.cwd(), "dist", file),
+    path.join(process.cwd(), "node_modules", "sql.js", "dist", file),
+    path.join(path.dirname(wasmFile), file),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0] ?? file;
+}
+
+function ensureDistWasm(wasmFile: string): string {
+  const distFile = path.join(process.cwd(), "dist", "sql-wasm.wasm");
+  if (fs.existsSync(distFile)) return distFile;
+  if (wasmFile && fs.existsSync(wasmFile) && path.resolve(wasmFile) !== path.resolve(distFile)) {
+    try {
+      fs.mkdirSync(path.dirname(distFile), { recursive: true });
+      fs.copyFileSync(wasmFile, distFile);
+      console.log("sql.js WASM copied to", distFile);
+      return distFile;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("sql.js WASM copy failed:", message);
+    }
+  }
+  return wasmFile;
+}
+
 function preferSqlJs(): boolean {
   const value = process.env.STEELDART_SQLJS?.trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes";
@@ -174,16 +203,25 @@ export async function openMiniDb(filePath: string): Promise<MiniDb> {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`sql.js konnte nicht geladen werden: ${message}`);
   }
-  const wasmFile = resolveSqlJsWasm();
+  const wasmFile = ensureDistWasm(resolveSqlJsWasm());
   if (!fs.existsSync(wasmFile)) {
     throw new Error(
-      `sql.js WASM fehlt (${wasmFile}). Build kopiert nach dist/sql-wasm.wasm — auf Hostinger Build-Befehl npm run build ausführen.`,
+      `sql.js WASM fehlt (${wasmFile}). Start kopiert nach dist/sql-wasm.wasm aus node_modules/sql.js.`,
     );
   }
-  const SQL = await initSqlJs({
-    wasmBinary: fs.readFileSync(wasmFile),
-    locateFile: (file) => path.join(path.dirname(wasmFile), file),
-  });
+  console.log("sqlite: sql.js wasm=", wasmFile);
+  const locateFile = (file: string) => sqlJsLocateFile(file, wasmFile);
+  let SQL;
+  try {
+    SQL = await initSqlJs({
+      wasmBinary: fs.readFileSync(wasmFile),
+      locateFile,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("sql.js wasmBinary fehlgeschlagen, locateFile retry:", message);
+    SQL = await initSqlJs({ locateFile });
+  }
 
   let db;
   if (filePath !== ":memory:" && fs.existsSync(filePath)) {

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "dist/electron.cjs",
+  "main": "app.js",
   "description": "Steeldart Dart-Counter – offline (Raspberry Pi) und online mit Räumen",
   "engines": {
     "node": ">=18"
@@ -17,10 +17,10 @@
     "copy:sql-wasm": "node scripts/copy-sql-wasm.mjs",
     "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --packages=external && node scripts/copy-sql-wasm.mjs",
     "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/electron.cjs --packages=external && esbuild electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.cjs",
-    "start": "node scripts/start.mjs",
-    "desktop": "npm run build && electron .",
+    "start": "node app.js",
+    "desktop": "npm run build && electron dist/electron.cjs",
     "pi": "npm run desktop",
-    "electron": "electron .",
+    "electron": "electron dist/electron.cjs",
     "pack:linux": "npm run dist:pi",
     "pack:win": "npm run dist:win",
     "pack:mac": "npm run build && electron-builder --mac",

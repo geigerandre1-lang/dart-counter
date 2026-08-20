@@ -75,11 +75,16 @@ function bindPort(server: http.Server, host: string, port: number, exclusive = t
   return new Promise((resolve, reject) => {
     const onError = (err: NodeJS.ErrnoException) => reject(err);
     server.once("error", onError);
+    const onListening = () => {
+      server.off("error", onError);
+      resolve();
+    };
     try {
-      server.listen({ port, host, exclusive }, () => {
-        server.off("error", onError);
-        resolve();
-      });
+      if (!exclusive) {
+        server.listen(port, host, onListening);
+      } else {
+        server.listen({ port, host, exclusive }, onListening);
+      }
     } catch (err) {
       server.off("error", onError);
       reject(err);
@@ -88,7 +93,7 @@ function bindPort(server: http.Server, host: string, port: number, exclusive = t
 }
 
 function envPort(): number | undefined {
-  const raw = process.env.PORT;
+  const raw = process.env.PORT || process.env.APP_PORT;
   if (raw == null || String(raw).trim() === "") return undefined;
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -261,6 +266,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 
   const rooms = new Map<string, Room>();
   const app = express();
+  app.get("/healthz", (_req, res) => {
+    res.status(200).type("text/plain").send("ok");
+  });
   app.use((req, res, next) => {
     if (req.path.startsWith("/api")) {
       res.setHeader("Access-Control-Allow-Origin", "*");
@@ -873,6 +881,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   const urls = lanUrls(runtime.port);
   const listenUrl = `http://${HOST}:${runtime.port}`;
   console.log(`listening ${listenUrl}`);
+  console.log(
+    `bind PORT=${process.env.PORT ?? ""} APP_PORT=${process.env.APP_PORT ?? ""} HOST=${HOST} hop=${pinnedEnvPort == null}`,
+  );
   console.log(`Steeldart Dart-Counter (${DEPLOY_MODE}) auf ${listenUrl}`);
   if (DEPLOY_MODE === "offline") {
     console.log("  Offline: Geräte die die IP öffnen, landen im lokalen Spiel.");

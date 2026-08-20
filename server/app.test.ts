@@ -248,7 +248,9 @@ describe("player create API", () => {
 describe("Hostinger PORT bind", () => {
   it("listens on process.env.PORT exactly", async () => {
     const prev = process.env.PORT;
+    const prevApp = process.env.APP_PORT;
     process.env.PORT = "39401";
+    delete process.env.APP_PORT;
     try {
       const started = await startServer({
         host: "127.0.0.1",
@@ -260,12 +262,45 @@ describe("Hostinger PORT bind", () => {
         expect(started.port).toBe(39401);
         const res = await fetch(`http://127.0.0.1:${started.port}/api/health`);
         expect(res.ok).toBe(true);
+        const healthz = await fetch(`http://127.0.0.1:${started.port}/healthz`);
+        expect(healthz.status).toBe(200);
+        expect(await healthz.text()).toBe("ok");
       } finally {
         await started.close();
       }
     } finally {
       if (prev == null) delete process.env.PORT;
       else process.env.PORT = prev;
+      if (prevApp == null) delete process.env.APP_PORT;
+      else process.env.APP_PORT = prevApp;
+    }
+  });
+
+  it("listens on process.env.APP_PORT when PORT is unset", async () => {
+    const prev = process.env.PORT;
+    const prevApp = process.env.APP_PORT;
+    delete process.env.PORT;
+    process.env.APP_PORT = "39402";
+    try {
+      const started = await startServer({
+        host: "127.0.0.1",
+        mode: "offline",
+        dbPath: tmpDb(),
+        publicDir: null,
+      });
+      try {
+        expect(started.port).toBe(39402);
+        const healthz = await fetch(`http://127.0.0.1:${started.port}/healthz`);
+        expect(healthz.status).toBe(200);
+        expect(await healthz.text()).toBe("ok");
+      } finally {
+        await started.close();
+      }
+    } finally {
+      if (prev == null) delete process.env.PORT;
+      else process.env.PORT = prev;
+      if (prevApp == null) delete process.env.APP_PORT;
+      else process.env.APP_PORT = prevApp;
     }
   });
 });

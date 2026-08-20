@@ -118,31 +118,25 @@ npm run build
 npm start
 ```
 
-`npm start` startet **sofort** `dist/server.js` (kein Vite zur Laufzeit). Fehlt `dist/`, wird **einmal** gebaut und danach gestartet — das kann auf Shared Hosting das Start-Timeout (503) auslösen. Deshalb Build und Start im Panel trennen.
+`npm start` startet **sofort** `app.js` → `dist/server.js` (kein Vite zur Laufzeit, wenn `dist/` schon da ist). Fehlt `dist/`, baut der Start **einmal** mit Vite + esbuild und kopiert `sql-wasm.wasm`.
 
-### Hostinger (Node.js, z. B. v18.20.8)
+### Hostinger (Node.js)
 
-Node **18+** reicht. Electron-Warnungen zu Node 22 ignorieren — die Desktop-Pakete sind `optionalDependencies` und dürfen bei `npm install` fehlschlagen.
+Startup file `server.js` **or** `app.js`. Build command optional if start self-builds.
 
 | Panel-Feld | Wert |
 | --- | --- |
 | Node.js-Version | **18** (oder höher) |
 | **Anwendungsroot** | Ordner des Git-Repos (nicht `public_html`) |
-| **Startdatei der Anwendung** | `app.js` |
-| **Build-Befehl** | `npm run build` |
-| **Start-Befehl** | nur falls das Panel ihn extra hat: `npm start` |
+| **Startdatei der Anwendung** | `server.js` oder `app.js` (nicht `dist/electron.cjs`) |
+| **Build-Befehl** | leer lassen, oder optional `npm run build:web` |
+| **Start-Befehl** | nur falls extra nötig: `npm start` |
 | **STEELDART_MODE** | `online` |
 | **PORT** | **nicht setzen** — das Panel injiziert den Port |
 
-Die Domain `dart-counter.turniertool.eu` muss **dieser Node-App** zugeordnet sein. Zeigt sie noch auf `public_html`, kommt Hostingers 503 oder die Default-Seite. `package.json` `"main"` ist die Electron-App — im Panel **nicht** als Startdatei nutzen.
+Die Domain `dart-counter.turniertool.eu` muss **dieser Node-App** zugeordnet sein. `package.json` `"main"` ist `app.js`. Nach Git-Pull **Redeploy** und Status **Running**.
 
-Nach einem Git-Pull im Panel **Redeploy** (Build + Restart) und Status **Running**, nicht nur Dateien ziehen. Ohne neuen Build fehlt `dist/` bzw. `dist/sql-wasm.wasm`, und der Prozess stirbt bevor er lauscht.
-
-`app.js` lädt `dist/server.js`. `npm start` macht dasselbe über `scripts/start.mjs`. Der Server bindet `process.env.PORT` auf `0.0.0.0` (oder `HOST`). `better-sqlite3` darf fehlen — Fallback ist sql.js; das WASM liegt nach dem Build in `dist/sql-wasm.wasm`.
-
-Wenn das Panel **keinen** eigenen Build-Schritt hat: trotzdem Build-Befehl `npm run build` eintragen. Nur `npm install && npm start` ohne vorheriges Build riskiert 503 durch Timeout.
-
-`npm run build:web` ist dasselbe ohne Electron-Bundle; für reines Webhosting reicht das.
+Der Server bindet `process.env.PORT` (sonst `APP_PORT`, sonst 3000) auf `0.0.0.0`. Kein Port-Hopping wenn `PORT` gesetzt ist. `better-sqlite3` darf fehlen — Fallback ist sql.js (`dist/sql-wasm.wasm` oder `node_modules/sql.js`).
 
 **Umgebung:**
 
