@@ -5,6 +5,7 @@ interface DesktopSession {
   origin: string;
   lanUrls: string[];
   resumeCode?: string;
+  adminPassword?: string;
 }
 
 type DesktopResult =
@@ -22,6 +23,7 @@ interface DesktopSettingsResult {
     onlineConfigured: boolean;
     boardId?: string;
     boardName?: string;
+    adminPasswordSet?: boolean;
   };
 }
 
@@ -37,6 +39,7 @@ interface SteeldartDesktop {
     boardId?: string;
     boardName?: string;
     adminToken?: string | null;
+    adminPasswordSet?: boolean;
   }>;
   offlineStatus?: () => Promise<{ resume: boolean; savedAt: number | null }>;
   startOffline?: (opts?: { resume?: boolean }) => Promise<DesktopResult>;
@@ -50,6 +53,7 @@ interface SteeldartDesktop {
     offlinePort?: number;
     boardName?: string;
     resetBoard?: boolean;
+    adminPassword?: string;
   }) => Promise<DesktopSettingsResult | { ok: false; error: string }>;
   listPlayers?: () => Promise<{ players: { id: string; name: string; createdAt: number }[] }>;
   createPlayer?: (

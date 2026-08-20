@@ -69,4 +69,24 @@ describe("join links", () => {
       "http://127.0.0.1:3001",
     );
   });
+
+  it("does not retarget public https/http to the internal Node bind port", () => {
+    expect(
+      apiOriginFromPage(
+        {
+          protocol: "https:",
+          hostname: "dart-counter.turniertool.eu",
+          port: "",
+          origin: "https://dart-counter.turniertool.eu",
+        },
+        3000,
+      ),
+    ).toBe("https://dart-counter.turniertool.eu");
+    expect(
+      apiOriginFromPage(
+        { protocol: "http:", hostname: "example.com", port: "", origin: "http://example.com" },
+        8080,
+      ),
+    ).toBe("http://example.com");
+  });
 });

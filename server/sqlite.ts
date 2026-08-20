@@ -161,6 +161,14 @@ function preferSqlJs(): boolean {
   return value === "1" || value === "true" || value === "yes";
 }
 
+let sqliteEngineLogged = false;
+
+function logSqlJsOnce(): void {
+  if (sqliteEngineLogged) return;
+  sqliteEngineLogged = true;
+  console.log("sqlite: sql.js (better-sqlite3 optional — erwartet auf Hostinger)");
+}
+
 function tryOpenBetterSqlite(filePath: string): MiniDb | null {
   if (preferSqlJs()) return null;
   try {
@@ -169,9 +177,8 @@ function tryOpenBetterSqlite(filePath: string): MiniDb | null {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     return new BetterSqliteDb(db);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.warn("better-sqlite3 nicht nutzbar, fallback auf sql.js:", message);
+  } catch {
+    // Missing native addon is normal on Hostinger — never dump Require stack.
     return null;
   }
 }
@@ -209,7 +216,7 @@ export async function openMiniDb(filePath: string): Promise<MiniDb> {
       `sql.js WASM fehlt (${wasmFile}). Start kopiert nach dist/sql-wasm.wasm aus node_modules/sql.js.`,
     );
   }
-  console.log("sqlite: sql.js wasm=", wasmFile);
+  logSqlJsOnce();
   const locateFile = (file: string) => sqlJsLocateFile(file, wasmFile);
   let SQL;
   try {

@@ -66,7 +66,11 @@ export default function App() {
   const [resumingOnline, setResumingOnline] = useState(false);
   const [tab, setTab] = useState<AppTab>("play");
   const [adminToken, setAdminToken] = useState<string | null>(() => loadAdminToken());
+  const [adminPasswordSet, setAdminPasswordSet] = useState(false);
+  const [creatingHostRoom, setCreatingHostRoom] = useState(false);
   const originRef = useRef<string | null>(null);
+  const pendingHostCreate = useRef(false);
+  const hostPasswordRef = useRef<string | null>(null);
   const prevStatus = useRef<string>("playing");
   const soundRef = useRef(sound);
   soundRef.current = sound;
@@ -100,10 +104,31 @@ export default function App() {
         setDeepJoin(null);
         setResumingOnline(false);
         void desktop?.clearOnlineResume?.();
+        const password = hostPasswordRef.current;
+        if (desktop && password && !pendingHostCreate.current) {
+          pendingHostCreate.current = true;
+          setCreatingHostRoom(true);
+          socket.send({
+            type: "createRoom",
+            mode: "online",
+            config: createDefaultConfig(),
+            password,
+            boardId: boardId || undefined,
+            boardName: boardName || undefined,
+          });
+          return;
+        }
+      }
+      if (pendingHostCreate.current) {
+        pendingHostCreate.current = false;
+        setCreatingHostRoom(false);
+        return;
       }
       window.setTimeout(() => setError(null), 3200);
     };
     socket.onSnapshot = (next) => {
+      pendingHostCreate.current = false;
+      setCreatingHostRoom(false);
       setSnap(next);
       if (next.lanUrls?.length) setLanUrls(next.lanUrls);
       const host = originRef.current;
@@ -111,10 +136,16 @@ export default function App() {
         void desktop.rememberOnline(host, next.code);
       }
     };
-  }, [desktop, socket]);
+  }, [boardId, boardName, desktop, socket]);
 
   const applySession = useCallback(
-    (session: { mode: DeployMode; origin: string; lanUrls: string[]; resumeCode?: string }) => {
+    (session: {
+      mode: DeployMode;
+      origin: string;
+      lanUrls: string[];
+      resumeCode?: string;
+      adminPassword?: string;
+    }) => {
       bindSocket();
       setMode(session.mode);
       setOrigin(session.origin);
@@ -125,12 +156,33 @@ export default function App() {
       if (session.resumeCode) socket.remember(session.resumeCode);
       else socket.remember(null);
       setResumingOnline(Boolean(session.resumeCode));
+      const password = session.adminPassword?.trim() || null;
+      hostPasswordRef.current = password;
+      const shouldCreate = Boolean(desktop && session.mode === "online" && !session.resumeCode);
+      pendingHostCreate.current = shouldCreate;
+      setCreatingHostRoom(shouldCreate);
       socket.disconnect();
       socket.connect(session.origin);
+      if (shouldCreate) {
+        if (!password) {
+          setError("Bitte das Admin-Passwort im Admin-Menü neben der Server-URL speichern.");
+          pendingHostCreate.current = false;
+          setCreatingHostRoom(false);
+        } else {
+          socket.send({
+            type: "createRoom",
+            mode: "online",
+            config: createDefaultConfig(),
+            password,
+            boardId: boardId || undefined,
+            boardName: boardName || undefined,
+          });
+        }
+      }
       setGate(false);
       setTab("play");
     },
-    [bindSocket, socket],
+    [bindSocket, boardId, boardName, desktop, socket],
   );
 
   useEffect(() => {
@@ -154,6 +206,7 @@ export default function App() {
         if (state.boardId) setBoardId(state.boardId);
         if (state.boardName) setBoardName(state.boardName);
         setOnlineConfigured(Boolean(state.onlineConfigured ?? state.savedRemoteUrl.trim()));
+        setAdminPasswordSet(Boolean(state.adminPasswordSet));
         if (state.lastMode) setLastMode(state.lastMode);
         if (state.adminToken) applyAdminToken(state.adminToken);
         if (state.session) applySession(state.session);
@@ -287,11 +340,15 @@ export default function App() {
   const connecting = Boolean(
     gateReady &&
       !gate &&
-      (mode === null || (offline && !snap) || Boolean(deepJoin && !snap) || (resumingOnline && !snap)),
+      (mode === null ||
+        (offline && !snap) ||
+        Boolean(deepJoin && !snap) ||
+        (resumingOnline && !snap) ||
+        (creatingHostRoom && !snap)),
   );
   const showGate = Boolean(desktop?.getState && gate && gateReady);
   const showJoinQr = Boolean(desktop?.getState);
-  const showHome = mode === "online" && !snap && !gate && !deepJoin && !resumingOnline;
+  const showHome = mode === "online" && !snap && !gate && !deepJoin && !resumingOnline && !creatingHostRoom;
   const showMatch = Boolean(snap?.match && snap.phase === "match" && !gate);
   const showSetup = Boolean(snap && !showMatch && !gate);
   const showChrome = (showGate || showHome || showSetup) && !connecting;
@@ -329,12 +386,14 @@ export default function App() {
           boardId={boardId}
           boardName={boardName}
           desktopSettings={Boolean(desktop)}
+          adminPasswordSet={adminPasswordSet}
           onSettingsSaved={(state) => {
             setSavedRemoteUrl(state.savedRemoteUrl);
             setOfflinePort(state.offlinePort);
             setOnlineConfigured(Boolean(state.onlineConfigured ?? state.savedRemoteUrl.trim()));
             if (state.boardId) setBoardId(state.boardId);
             if (state.boardName) setBoardName(state.boardName);
+            if (typeof state.adminPasswordSet === "boolean") setAdminPasswordSet(state.adminPasswordSet);
           }}
           onLogout={() => applyAdminToken(null)}
         />
@@ -425,6 +484,11 @@ export default function App() {
             socket.send({ type: "startMatch", boardId: boardId || undefined, boardName: boardName || undefined })
           }
           onHome={offline || snap.mode === "local" ? undefined : leaveOnline}
+          onJoinOther={
+            desktop && !offline && snap.mode !== "local"
+              ? (code) => socket.send({ type: "joinRoom", code })
+              : undefined
+          }
           onChangeMode={desktop?.disconnect ? () => void changeMode() : undefined}
         />
       )}

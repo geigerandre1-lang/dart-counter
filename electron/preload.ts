@@ -5,6 +5,7 @@ export interface DesktopSession {
   origin: string;
   lanUrls: string[];
   resumeCode?: string;
+  adminPassword?: string;
 }
 
 contextBridge.exposeInMainWorld("steeldartDesktop", {
@@ -23,6 +24,7 @@ contextBridge.exposeInMainWorld("steeldartDesktop", {
     offlinePort?: number;
     boardName?: string;
     resetBoard?: boolean;
+    adminPassword?: string;
   }) => ipcRenderer.invoke("desktop:saveSettings", patch),
   listPlayers: () => ipcRenderer.invoke("desktop:listPlayers"),
   createPlayer: (name: string, passNr?: string | null) => ipcRenderer.invoke("desktop:createPlayer", name, passNr),

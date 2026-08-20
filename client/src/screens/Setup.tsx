@@ -22,6 +22,7 @@ interface Props {
   onChange: (config: MatchConfig) => void;
   onStart: () => void;
   onHome?: () => void;
+  onJoinOther?: (code: string) => void;
   onChangeMode?: () => void;
   apiBase?: string;
   origin?: string | null;
@@ -101,6 +102,7 @@ export default function Setup({
   onChange,
   onStart,
   onHome,
+  onJoinOther,
   onChangeMode,
   apiBase = "",
   origin = null,
@@ -114,6 +116,7 @@ export default function Setup({
   const [newName, setNewName] = useState("");
   const [newPassNr, setNewPassNr] = useState("");
   const [playerError, setPlayerError] = useState<string | null>(null);
+  const [otherCode, setOtherCode] = useState("");
   const ready = players.every((p) => p.id && p.name.trim());
   const onChangeRef = useRef(onChange);
   const configRef = useRef(config);
@@ -226,6 +229,31 @@ export default function Setup({
               <div className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-400">Raum-ID</div>
               <div className="font-mono text-4xl tracking-[0.2em] text-amber-glow">{code}</div>
             </div>
+          )}
+          {onJoinOther && (
+            <form
+              className="mt-3 flex flex-wrap items-end gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const next = otherCode.trim().toUpperCase();
+                if (next) onJoinOther(next);
+              }}
+            >
+              <label className="min-w-0 flex-1 text-xs text-slate-500">
+                Anderem Raum beitreten
+                <input
+                  value={otherCode}
+                  onChange={(e) => setOtherCode(e.target.value.toUpperCase())}
+                  placeholder="RAUM-ID"
+                  maxLength={6}
+                  autoCapitalize="characters"
+                  className="mt-1 min-h-touch w-full rounded-2xl bg-ink-950 px-4 font-mono tracking-[0.2em] outline-none ring-amber-glow/40 focus:ring"
+                />
+              </label>
+              <button type="submit" className="min-h-touch rounded-2xl bg-ink-700 px-4 text-sm font-bold">
+                Beitreten
+              </button>
+            </form>
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-3">

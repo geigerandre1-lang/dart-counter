@@ -197,12 +197,14 @@ interface Props {
   boardId?: string;
   boardName?: string;
   desktopSettings: boolean;
+  adminPasswordSet?: boolean;
   onSettingsSaved?: (state: {
     savedRemoteUrl: string;
     offlinePort: number;
     onlineConfigured?: boolean;
     boardId?: string;
     boardName?: string;
+    adminPasswordSet?: boolean;
   }) => void;
   onLogout: () => void;
 }
@@ -217,6 +219,7 @@ export default function Admin({
   boardId = "",
   boardName = "Scheibe 1",
   desktopSettings,
+  adminPasswordSet = false,
   onSettingsSaved,
   onLogout,
 }: Props) {
@@ -229,6 +232,8 @@ export default function Admin({
   const [csvText, setCsvText] = useState("");
   const [csvSummary, setCsvSummary] = useState<string | null>(null);
   const [url, setUrl] = useState(savedRemoteUrl);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [passwordSaved, setPasswordSaved] = useState(adminPasswordSet);
   const [port, setPort] = useState(String(offlinePort || 3000));
   const [boardLabel, setBoardLabel] = useState(boardName);
   const [busy, setBusy] = useState(false);
@@ -259,7 +264,8 @@ export default function Admin({
     setUrl(savedRemoteUrl);
     setPort(String(offlinePort || 3000));
     setBoardLabel(boardName);
-  }, [savedRemoteUrl, offlinePort, boardName]);
+    setPasswordSaved(adminPasswordSet);
+  }, [savedRemoteUrl, offlinePort, boardName, adminPasswordSet]);
 
   const saveDesktop = async () => {
     if (!desktop?.saveSettings) return;
@@ -268,18 +274,22 @@ export default function Admin({
       remoteUrl: url.trim(),
       offlinePort: Number(port) || 3000,
       boardName: boardLabel.trim() || "Scheibe 1",
+      adminPassword: adminPassword.trim() || undefined,
     });
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
+    if (adminPassword.trim()) setAdminPassword("");
+    setPasswordSaved(Boolean(result.state.adminPasswordSet ?? passwordSaved || adminPassword.trim()));
     onSettingsSaved?.({
       savedRemoteUrl: result.state.savedRemoteUrl,
       offlinePort: result.state.offlinePort,
       onlineConfigured: result.state.onlineConfigured,
       boardId: result.state.boardId,
       boardName: result.state.boardName,
+      adminPasswordSet: result.state.adminPasswordSet,
     });
   };
 
@@ -317,6 +327,18 @@ export default function Admin({
           />
           <p className="mt-2 text-xs text-slate-500">
             Ohne URL bleibt Online auf dem Startbildschirm verborgen. Leeres Feld löscht die URL.
+          </p>
+          <label className="mt-4 block text-sm text-slate-400">Admin-Passwort (Webserver)</label>
+          <input
+            type="password"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            placeholder={passwordSaved ? "gespeichert — neu eingeben zum Ändern" : "wie STEELDART_ADMIN_PASSWORD"}
+            autoComplete="new-password"
+            className="mt-1 min-h-touch w-full rounded-2xl bg-ink-950 px-4 outline-none ring-amber-glow/40 focus:ring"
+          />
+          <p className="mt-2 text-xs text-slate-500">
+            Dasselbe Passwort wie auf Hostinger. Die Desktop-App eröffnet damit automatisch einen Raum.
           </p>
           <label className="mt-4 block text-sm text-slate-400">Offline-Port</label>
           <input

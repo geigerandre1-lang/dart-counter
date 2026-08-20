@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { openMiniDb } from "./sqlite.js";
 
 const dirs: string[] = [];
@@ -24,6 +24,21 @@ describe("sql.js fallback", () => {
     expect(db.get<{ name: string }>("SELECT name FROM t")?.name).toBe("hostinger");
     expect(db.all<{ name: string }>("SELECT name FROM t")).toHaveLength(1);
     db.close();
+  });
+
+  it("does not dump a better-sqlite3 Require stack when sql.js is forced", async () => {
+    process.env.STEELDART_SQLJS = "1";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const db = await openMiniDb(":memory:");
+      db.close();
+      expect(warn.mock.calls.flat().join(" ")).not.toMatch(/Cannot find module/);
+      expect(error.mock.calls.flat().join(" ")).not.toMatch(/Cannot find module/);
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
   });
 
   it("persists a sql.js database to disk and reopens it", async () => {

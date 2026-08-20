@@ -46,6 +46,19 @@ export function joinUrlForSession(opts: {
   return preferLanUrl(opts.lanUrls);
 }
 
+function pageListenPort(page: { protocol: string; port: string }): number {
+  if (page.port) return Number(page.port);
+  return page.protocol === "https:" ? 443 : 80;
+}
+
+/** True when the page is the public reverse-proxy URL (Hostinger :443), not Vite. */
+function isPublicHttpOrigin(page: { protocol: string; port: string }): boolean {
+  const port = pageListenPort(page);
+  if (page.protocol === "https:") return port === 443;
+  if (page.protocol === "http:") return port === 80;
+  return false;
+}
+
 /** HTTP origin the UI should call for REST/WS — follows /api/info.port after fallback. */
 export function apiOriginFromPage(
   page: { protocol: string; hostname: string; port: string; origin: string },
@@ -54,8 +67,11 @@ export function apiOriginFromPage(
   if (page.protocol === "file:") {
     return typeof infoPort === "number" && infoPort > 0 ? `http://127.0.0.1:${infoPort}` : "";
   }
+  // Hosted HTTPS (dart-counter.turniertool.eu) reports Node's bind PORT (3000).
+  // Retargeting to :3000 breaks Admin login and WebSocket on the public domain.
+  if (isPublicHttpOrigin(page)) return page.origin;
   if (typeof infoPort === "number" && infoPort > 0) {
-    const pagePort = page.port ? Number(page.port) : page.protocol === "https:" ? 443 : 80;
+    const pagePort = pageListenPort(page);
     if (Number.isFinite(pagePort) && pagePort !== infoPort) {
       return `${page.protocol}//${page.hostname}:${infoPort}`;
     }

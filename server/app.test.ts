@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -196,6 +196,70 @@ describe("GET /api/monitor", () => {
   });
 });
 
+describe("GET /monitor SPA", () => {
+  it("serves index.html for /monitor and /monitor/ without redirects", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "steeldart-spa-"));
+    dirs.push(dir);
+    writeFileSync(path.join(dir, "index.html"), "<!doctype html><title>steeldart-spa</title>");
+
+    const started = await startServer({
+      port: 39313,
+      host: "127.0.0.1",
+      mode: "online",
+      dbPath: tmpDb(),
+      publicDir: dir,
+    });
+    try {
+      for (const pathname of ["/monitor", "/monitor/"]) {
+        const res = await fetch(`http://127.0.0.1:${started.port}${pathname}`, { redirect: "manual" });
+        expect(res.status).toBe(200);
+        expect(res.headers.get("location")).toBeNull();
+        expect(await res.text()).toContain("steeldart-spa");
+      }
+    } finally {
+      await started.close();
+    }
+  });
+
+  it("POST /api/admin/login returns JSON, never the SPA HTML", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "steeldart-spa-"));
+    dirs.push(dir);
+    writeFileSync(path.join(dir, "index.html"), "<!doctype html><title>steeldart-spa</title>");
+
+    const started = await startServer({
+      port: 39314,
+      host: "127.0.0.1",
+      mode: "online",
+      dbPath: tmpDb(),
+      publicDir: dir,
+    });
+    try {
+      const wrong = await fetch(`http://127.0.0.1:${started.port}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: "not-the-password" }),
+      });
+      expect(wrong.status).toBe(401);
+      expect(wrong.headers.get("content-type") ?? "").toMatch(/json/i);
+      const body = (await wrong.json()) as { ok?: boolean; error?: string };
+      expect(body.ok).toBe(false);
+      expect(body.error).toBe("Passwort falsch");
+
+      const ok = await fetch(`http://127.0.0.1:${started.port}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: getAdminPassword() }),
+      });
+      expect(ok.status).toBe(200);
+      const granted = (await ok.json()) as { ok?: boolean; token?: string };
+      expect(granted.ok).toBe(true);
+      expect(granted.token).toBeTruthy();
+    } finally {
+      await started.close();
+    }
+  });
+});
+
 describe("player create API", () => {
   it("creates players and Training members with empty PassNr", async () => {
     const started = await startServer({
@@ -375,6 +439,38 @@ describe("Hostinger PORT bind", () => {
       else process.env.PORT = prev;
       if (prevApp == null) delete process.env.APP_PORT;
       else process.env.APP_PORT = prevApp;
+    }
+  });
+});
+
+describe("primary boot singleton", () => {
+  it("returns the same listener when startServer() is called twice", async () => {
+    const g = globalThis as { __steeldartStarted?: Promise<{ server: unknown; port: number; close: () => Promise<void> }> };
+    delete g.__steeldartStarted;
+    const prev = process.env.PORT;
+    const prevApp = process.env.APP_PORT;
+    const prevDb = process.env.STEELDART_DB;
+    const prevHost = process.env.HOST;
+    process.env.PORT = "39411";
+    process.env.STEELDART_DB = tmpDb();
+    process.env.HOST = "127.0.0.1";
+    delete process.env.APP_PORT;
+    try {
+      const a = await startServer();
+      const b = await startServer();
+      expect(a.server).toBe(b.server);
+      expect(a.port).toBe(39411);
+      await a.close();
+    } finally {
+      delete g.__steeldartStarted;
+      if (prev == null) delete process.env.PORT;
+      else process.env.PORT = prev;
+      if (prevApp == null) delete process.env.APP_PORT;
+      else process.env.APP_PORT = prevApp;
+      if (prevDb == null) delete process.env.STEELDART_DB;
+      else process.env.STEELDART_DB = prevDb;
+      if (prevHost == null) delete process.env.HOST;
+      else process.env.HOST = prevHost;
     }
   });
 });

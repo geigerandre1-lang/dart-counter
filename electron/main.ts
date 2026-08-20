@@ -18,6 +18,7 @@ import {
   resetBoardIdentity,
   savePrefs,
   statsDbPath,
+  configuredAdminPassword,
 } from "./prefs.js";
 
 export interface DesktopSession {
@@ -25,6 +26,7 @@ export interface DesktopSession {
   origin: string;
   lanUrls: string[];
   resumeCode?: string;
+  adminPassword?: string;
 }
 
 let owned: StartedServer | null = null;
@@ -78,6 +80,7 @@ function desktopState() {
     onlineConfigured: isOnlineConfigured(prefs),
     boardId: prefs.boardId ?? "",
     boardName: prefs.boardName ?? "Scheibe 1",
+    adminPasswordSet: Boolean(configuredAdminPassword(prefs)),
     adminToken: issuedAdminToken && adminTokenValid(issuedAdminToken) ? issuedAdminToken : null,
   };
 }
@@ -225,7 +228,13 @@ async function connectOnline(rawUrl?: string): Promise<DesktopSession> {
   await closeLocalStore();
   await shutdownOwnedServer();
   const resume = freshOnlineResume(origin);
-  session = { mode: "online", origin, lanUrls: [], resumeCode: resume?.roomCode };
+  session = {
+    mode: "online",
+    origin,
+    lanUrls: [],
+    resumeCode: resume?.roomCode,
+    adminPassword: configuredAdminPassword() || undefined,
+  };
   savePrefs({ lastMode: "online", remoteUrl: origin });
   return session;
 }
@@ -363,7 +372,13 @@ function registerIpc(): void {
     "desktop:saveSettings",
     async (
       _evt,
-      patch: { remoteUrl?: string; offlinePort?: number; boardName?: string; resetBoard?: boolean },
+      patch: {
+        remoteUrl?: string;
+        offlinePort?: number;
+        boardName?: string;
+        resetBoard?: boolean;
+        adminPassword?: string;
+      },
     ) => {
     const remoteUrl = typeof patch?.remoteUrl === "string" ? patch.remoteUrl.trim() : configuredRemoteUrl();
     let port = offlinePort();
@@ -374,12 +389,17 @@ function registerIpc(): void {
       port = patch.offlinePort;
     }
     if (patch?.resetBoard) resetBoardIdentity();
+    const prev = loadPrefs();
     const next = savePrefs({
       remoteUrl,
       offlinePort: port,
-      lastMode: remoteUrl ? loadPrefs().lastMode : "offline",
-      onlineResume: remoteUrl ? loadPrefs().onlineResume : null,
-      boardName: typeof patch?.boardName === "string" && patch.boardName.trim() ? patch.boardName.trim() : loadPrefs().boardName,
+      lastMode: remoteUrl ? prev.lastMode : "offline",
+      onlineResume: remoteUrl ? prev.onlineResume : null,
+      boardName: typeof patch?.boardName === "string" && patch.boardName.trim() ? patch.boardName.trim() : prev.boardName,
+      adminPassword:
+        typeof patch?.adminPassword === "string"
+          ? patch.adminPassword.trim() || prev.adminPassword
+          : prev.adminPassword,
     });
     if (!remoteUrl && session?.mode === "online") {
       await disconnectSession();

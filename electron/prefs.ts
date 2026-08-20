@@ -8,6 +8,8 @@ export const DEFAULT_OFFLINE_PORT = 3000;
 
 export interface DesktopPrefs {
   remoteUrl?: string;
+  /** Hosted-server admin password for auto createRoom. */
+  adminPassword?: string;
   lastMode?: "offline" | "online";
   onlineResume?: OnlineResume | null;
   offlinePort?: number;
@@ -71,6 +73,21 @@ export function configuredRemoteUrl(prefs = loadPrefs()): string {
 
 export function isOnlineConfigured(prefs = loadPrefs()): boolean {
   return configuredRemoteUrl(prefs).length > 0;
+}
+
+export function configuredAdminPassword(prefs = loadPrefs()): string {
+  const stored = (prefs.adminPassword ?? "").trim();
+  if (stored) return stored;
+  const env = String(process.env.STEELDART_ADMIN_PASSWORD ?? "")
+    .replace(/^\uFEFF/, "")
+    .trim();
+  if (env.length >= 2) {
+    const quote = env[0];
+    if ((quote === '"' || quote === "'") && env[env.length - 1] === quote) {
+      return env.slice(1, -1).trim();
+    }
+  }
+  return env;
 }
 
 export function offlinePort(prefs = loadPrefs()): number {

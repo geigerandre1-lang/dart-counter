@@ -271,7 +271,36 @@ function readAdminToken(req: Request): string | undefined {
   return bodyToken || queryToken;
 }
 
+type SteeldartGlobal = typeof globalThis & {
+  __steeldartStarted?: Promise<StartedServer>;
+};
+
+function isPrimaryBoot(options: StartServerOptions): boolean {
+  return (
+    options.port == null &&
+    options.host == null &&
+    options.mode == null &&
+    options.dbPath == null &&
+    options.publicDir === undefined &&
+    options.persistPath == null &&
+    options.restore == null
+  );
+}
+
+/** Hostinger may require(app.js) and also `node app.js` in one process — listen only once. */
 export async function startServer(options: StartServerOptions = {}): Promise<StartedServer> {
+  if (!isPrimaryBoot(options)) return bootServer(options);
+  const g = globalThis as SteeldartGlobal;
+  if (!g.__steeldartStarted) {
+    g.__steeldartStarted = bootServer(options).catch((err) => {
+      delete (globalThis as SteeldartGlobal).__steeldartStarted;
+      throw err;
+    });
+  }
+  return g.__steeldartStarted;
+}
+
+async function bootServer(options: StartServerOptions = {}): Promise<StartedServer> {
   const pinnedEnvPort = envPort();
   const hop = pinnedEnvPort == null;
   const runtime = { port: pinnedEnvPort ?? options.port ?? 3000 };
@@ -309,6 +338,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     next();
   });
   app.use(express.json());
+  app.use(express.urlencoded({ extended: false }));
 
   const requireAdmin = (req: Request, res: Response): boolean => {
     if (!adminTokenValid(readAdminToken(req))) {
@@ -380,7 +410,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   app.post("/api/admin/login", (req, res) => {
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!passwordsMatch(password, getAdminPassword())) {
-      res.status(401).json({ ok: false, error: "Falsches Passwort." });
+      res.status(401).json({ ok: false, error: "Passwort falsch" });
       return;
     }
     res.json({ ok: true, token: issueAdminToken() });
@@ -671,11 +701,10 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     const spa = (_req: Request, res: Response) => {
       res.sendFile(path.join(publicDir, "index.html"));
     };
-    app.get("/monitor/", (_req, res) => {
-      res.redirect(302, "/monitor");
-    });
-    app.get("/monitor", spa);
-    app.use(express.static(publicDir));
+    // Both /monitor and /monitor/ must 200 the SPA. Express treats them as the
+    // same path by default, so a slash-stripping redirect 302s /monitor forever.
+    app.get(["/monitor", "/monitor/"], spa);
+    app.use(express.static(publicDir, { redirect: false }));
     app.get("*", spa);
   }
 
@@ -915,7 +944,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   if (DEPLOY_MODE === "offline") {
     console.log("  Offline: Geräte die die IP öffnen, landen im lokalen Spiel.");
   } else {
-    console.log("  Online: Raum erstellen oder per Raum-ID beitreten. Räume bleiben 2h nach letzter Aktion.");
+    bootLog("Online: Räume 2h nach letzter Aktion.");
   }
   for (const url of urls) console.log(`  LAN: ${url}`);
 

@@ -11,6 +11,20 @@ interface Props {
   onAdminToken?: (token: string | null) => void;
 }
 
+/** Same-origin /api on the public site — never the internal Node bind port from /api/info. */
+function adminApi(apiBase: string, path: string): string {
+  if (typeof location !== "undefined" && location.protocol !== "file:") {
+    if (!apiBase) return path;
+    try {
+      if (new URL(apiBase).hostname === location.hostname) return path;
+    } catch {
+      /* relative or invalid base */
+    }
+  }
+  if (!apiBase) return path;
+  return `${apiBase.replace(/\/+$/, "")}${path}`;
+}
+
 export default function Home({ onCreate, onJoin, error, serverUrl, apiBase = "", onChangeMode, onAdminToken }: Props) {
   const [code, setCode] = useState("");
   const [adminOpen, setAdminOpen] = useState(false);
@@ -21,10 +35,10 @@ export default function Home({ onCreate, onJoin, error, serverUrl, apiBase = "",
   const [roomCount, setRoomCount] = useState<number | null>(null);
   const [maxRooms, setMaxRooms] = useState(4);
 
-  const infoUrl = `${apiBase}/api/info`;
-  const loginUrl = `${apiBase}/api/admin/login`;
-  const verifyUrl = `${apiBase}/api/admin/verify`;
-  const logoutUrl = `${apiBase}/api/admin/logout`;
+  const infoUrl = adminApi(apiBase, "/api/info");
+  const loginUrl = adminApi(apiBase, "/api/admin/login");
+  const verifyUrl = adminApi(apiBase, "/api/admin/verify");
+  const logoutUrl = adminApi(apiBase, "/api/admin/logout");
   const full = maxRooms > 0 && roomCount != null && roomCount >= maxRooms;
 
   useEffect(() => {
@@ -86,11 +100,18 @@ export default function Home({ onCreate, onJoin, error, serverUrl, apiBase = "",
       const res = await fetch(loginUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password: password.trim() }),
       });
-      const data = (await res.json()) as { ok?: boolean; token?: string; error?: string };
+      const text = await res.text();
+      let data: { ok?: boolean; token?: string; error?: string } = {};
+      try {
+        data = JSON.parse(text) as { ok?: boolean; token?: string; error?: string };
+      } catch {
+        setAdminError(res.status === 401 ? "Passwort falsch" : "Server nicht erreichbar.");
+        return;
+      }
       if (!res.ok || !data.ok || !data.token) {
-        setAdminError(data.error || "Falsches Passwort.");
+        setAdminError("Passwort falsch");
         setAdminToken(null);
         sessionStorage.removeItem(TOKEN_KEY);
         return;
@@ -100,6 +121,7 @@ export default function Home({ onCreate, onJoin, error, serverUrl, apiBase = "",
       onAdminToken?.(data.token);
       setPassword("");
       setAdminOpen(false);
+      setAdminError(null);
     } catch {
       setAdminError("Server nicht erreichbar.");
     } finally {
@@ -200,7 +222,12 @@ export default function Home({ onCreate, onJoin, error, serverUrl, apiBase = "",
       </div>
 
       {(error || adminError) && (
-        <div className="rounded-2xl bg-crimson/20 px-4 py-3 text-center text-crimson">{adminError || error}</div>
+        <div
+          role="alert"
+          className="rounded-2xl bg-crimson px-4 py-4 text-center text-lg font-bold text-white"
+        >
+          {adminError || error}
+        </div>
       )}
 
       {!adminToken && (
@@ -218,7 +245,7 @@ export default function Home({ onCreate, onJoin, error, serverUrl, apiBase = "",
             </button>
           ) : (
             <form
-              className="w-56 rounded-2xl border border-white/10 bg-ink-900/95 p-3 text-left"
+              className="w-64 rounded-2xl border border-white/10 bg-ink-900/95 p-3 text-left"
               onSubmit={(e) => {
                 e.preventDefault();
                 void login();
@@ -233,10 +260,15 @@ export default function Home({ onCreate, onJoin, error, serverUrl, apiBase = "",
                 autoComplete="current-password"
                 className="mt-2 min-h-touch w-full rounded-xl bg-ink-950 px-3 text-sm outline-none ring-amber-glow/40 focus:ring"
               />
+              {adminError && (
+                <p role="alert" className="mt-2 text-sm font-bold text-crimson">
+                  {adminError}
+                </p>
+              )}
               <div className="mt-2 flex gap-2">
                 <button
                   type="submit"
-                  disabled={adminBusy || !password}
+                  disabled={adminBusy || !password.trim()}
                   className="min-h-touch flex-1 rounded-xl bg-ink-700 text-xs font-bold disabled:opacity-50"
                 >
                   Login

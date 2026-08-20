@@ -36,6 +36,19 @@ describe("admin auth", () => {
     try {
       expect(getAdminPassword()).toBe("HostingerSecret");
       expect(passwordsMatch("HostingerSecret", getAdminPassword())).toBe(true);
+      expect(passwordsMatch("  HostingerSecret  ", getAdminPassword())).toBe(true);
+    } finally {
+      if (prev == null) delete process.env.STEELDART_ADMIN_PASSWORD;
+      else process.env.STEELDART_ADMIN_PASSWORD = prev;
+    }
+  });
+
+  it("strips wrapping quotes Hostinger puts around env values", () => {
+    const prev = process.env.STEELDART_ADMIN_PASSWORD;
+    process.env.STEELDART_ADMIN_PASSWORD = '"QuotedSecret"';
+    try {
+      expect(getAdminPassword()).toBe("QuotedSecret");
+      expect(passwordsMatch("QuotedSecret", getAdminPassword())).toBe(true);
     } finally {
       if (prev == null) delete process.env.STEELDART_ADMIN_PASSWORD;
       else process.env.STEELDART_ADMIN_PASSWORD = prev;

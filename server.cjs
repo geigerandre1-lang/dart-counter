@@ -5,6 +5,11 @@
  */
 "use strict";
 
+if (global.__steeldartEntry) {
+  module.exports = global.__steeldartEntry;
+  module.exports.ready = global.__steeldartEntry.ready || global.__steeldartEntry;
+} else {
+
 var fs = require("fs");
 var path = require("path");
 var childProcess = require("child_process");
@@ -239,5 +244,7 @@ var boot = loadDist()
     process.exit(1);
   });
 
+global.__steeldartEntry = boot;
 module.exports = boot;
 module.exports.ready = boot;
+}

@@ -6,14 +6,25 @@ const TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
 
 const tokens = new Map<string, number>();
 
+/** Trim BOM/whitespace; strip wrapping quotes Hostinger often adds around env values. */
+export function normalizeAdminSecret(raw: string | undefined | null): string {
+  let value = String(raw ?? "").replace(/^\uFEFF/, "").trim();
+  if (value.length >= 2) {
+    const quote = value[0];
+    if ((quote === '"' || quote === "'") && value[value.length - 1] === quote) {
+      value = value.slice(1, -1).trim();
+    }
+  }
+  return value;
+}
+
 export function getAdminPassword(): string {
-  const fromEnv = process.env.STEELDART_ADMIN_PASSWORD;
-  const trimmed = fromEnv == null ? "" : String(fromEnv).trim();
-  return trimmed.length > 0 ? trimmed : DEFAULT_ADMIN_PASSWORD;
+  const fromEnv = normalizeAdminSecret(process.env.STEELDART_ADMIN_PASSWORD);
+  return fromEnv.length > 0 ? fromEnv : DEFAULT_ADMIN_PASSWORD;
 }
 
 export function passwordsMatch(given: string | undefined, expected: string): boolean {
-  const a = Buffer.from(String(given ?? ""), "utf8");
+  const a = Buffer.from(String(given ?? "").trim(), "utf8");
   const b = Buffer.from(expected, "utf8");
   if (a.length !== b.length) {
     timingSafeEqual(b, b);

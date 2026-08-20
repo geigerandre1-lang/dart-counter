@@ -78,7 +78,7 @@ export default function DesktopGate({
             <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Online</div>
             <div className="mt-1 font-display text-3xl text-white">Webserver</div>
             <p className="mt-2 text-sm text-slate-400">
-              Verbindung zum konfigurierten Webserver. Raum erstellen oder mit Raum-ID beitreten.
+              Verbindung zum konfigurierten Webserver. Öffnet automatisch einen Raum.
               {lastMode === "online" ? " Zuletzt Online genutzt." : ""}
             </p>
           </button>
