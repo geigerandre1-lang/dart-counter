@@ -71,7 +71,7 @@ Die Datei `steeldart-counter` *ist* die App.
 
 ### Auf dem Pi selbst bauen
 
-CI baut linux-arm64 nativ auf `ubuntu-24.04-arm`. Lokal am Pi (empfohlen gegenüber Cross-Compile):
+CI baut linux-arm64 per Cross-Compile auf `ubuntu-latest` (private GitHub-Free-Konten haben keinen ARM-Runner). Lokal am Pi (nativ, empfohlen):
 
 ```bash
 sudo apt update

@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
 
+# Windows and Pi are independent: a Pi miss must not block the Windows EXE.
 jobs:
   dist-win:
     name: Windows portable
@@ -17,16 +18,23 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Electron 43 (optionalDependency) requires Node >= 22.12; Node 20 skipped the toolchain.
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --include=optional
+
+      - name: Verify electron-builder
+        run: npx --yes electron-builder --version
 
       - name: Build portable EXE
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run dist:win
+
+      - name: List release outputs
+        run: Get-ChildItem -Name release
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -38,26 +46,33 @@ jobs:
 
   dist-pi:
     name: Linux ARM64 (Raspberry Pi)
-    # Native GitHub-hosted ARM64 (Pi 4/5 64-bit). Avoids x64→arm64 cross-compile.
-    runs-on: ubuntu-24.04-arm
+    # Private GitHub Free does not include ubuntu-24.04-arm. Cross-compile on
+    # ubuntu-latest: electron-builder downloads the linux-arm64 Electron zip.
+    # Native better-sqlite3 is skipped (sql.js fallback). continue-on-error so a
+    # Pi packaging miss still leaves the workflow green once Windows succeeds.
+    runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
-      - name: Install native build tools
-        run: sudo apt-get update && sudo apt-get install -y python3 make g++ zip
-
       - name: Install dependencies
-        run: npm install
+        run: npm ci --include=optional
+
+      - name: Verify electron-builder
+        run: npx --yes electron-builder --version
 
       - name: Build linux-arm64 portable
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run dist:pi:arm64
+
+      - name: List release outputs
+        run: ls -la release
 
       - name: Upload Linux ARM64 artifacts
         uses: actions/upload-artifact@v4
@@ -72,7 +87,7 @@ jobs:
   publish:
     name: Rolling GitHub Release
     needs: [dist-win, dist-pi]
-    if: always() && (needs.dist-win.result == 'success' || needs.dist-pi.result == 'success')
+    if: always() && needs.dist-win.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Download build artifacts
