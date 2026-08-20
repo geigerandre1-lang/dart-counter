@@ -1,0 +1,131 @@
+{
+  "name": "steeldart-counter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/electron.cjs",
+  "description": "Steeldart Dart-Counter – offline (Raspberry Pi) und online mit Räumen",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,client -c cyan,magenta \"tsx watch server/index.ts\" \"vite --host\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite --host",
+    "build": "vite build && npm run build:server && npm run build:electron",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=esm --outfile=dist/server.js --packages=external",
+    "build:electron": "esbuild electron/main.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/electron.cjs --packages=external && esbuild electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.cjs",
+    "start": "node dist/server.js",
+    "desktop": "npm run build && electron .",
+    "pi": "npm run desktop",
+    "electron": "electron .",
+    "pack:linux": "npm run dist:pi",
+    "pack:win": "npm run dist:win",
+    "pack:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win portable --x64",
+    "dist:pi": "npm run build && electron-builder --linux dir tar.gz --arm64 --armv7l --config.npmRebuild=false",
+    "dist:pi:native": "npm run build && electron-builder --linux dir tar.gz --arm64 --armv7l",
+    "dist": "npm run dist:win && npm run dist:pi",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "build": {
+    "appId": "de.steeldart.counter",
+    "productName": "Steeldart Dart-Counter",
+    "directories": {
+      "output": "release"
+    },
+    "artifactName": "steeldart-counter-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "dist/client/**/*",
+      "dist/electron.cjs",
+      "dist/preload.cjs"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/node_modules/sql.js/**"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/sql.js/dist/sql-wasm.wasm",
+        "to": "sql-wasm.wasm"
+      }
+    ],
+    "extraMetadata": {
+      "main": "dist/electron.cjs"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "arm64",
+            "armv7l"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "arm64",
+            "armv7l"
+          ]
+        }
+      ],
+      "category": "Game",
+      "executableName": "steeldart-counter",
+      "extraFiles": [
+        {
+          "from": "packaging/start.sh",
+          "to": "start.sh"
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.sports"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4",
+    "sql.js": "^1.14.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/sql.js": "^1.4.11",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "electron": "^43.4.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.24.2",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.6",
+    "vitest": "^2.1.8"
+  }
+}

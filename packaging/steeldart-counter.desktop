@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Steeldart Dart-Counter
+Comment=Lokales Steeldart-Zählspiel (Kiosk)
+# Pfad anpassen. Nach electron-builder z. B.:
+# Exec=/home/pi/dart-counter/release/linux-arm64-unpacked/steeldart-counter
+Exec=/home/pi/dart-counter/packaging/start-desktop.sh
+Terminal=false
+Categories=Game;
+StartupNotify=true
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,19 @@
+{
+  "name": "Steeldart Dart-Counter",
+  "short_name": "Steeldart",
+  "description": "Dart-Counter für Steeldart – offline und online",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05070d",
+  "theme_color": "#05070d",
+  "orientation": "any",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

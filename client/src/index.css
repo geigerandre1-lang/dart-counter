@@ -1,0 +1,284 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100dvh;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 800px at 50% -10%, #1a2744 0%, #05070d 55%);
+  color: #f8fafc;
+  font-family: "Segoe UI", system-ui, Roboto, "Helvetica Neue", sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.score-num,
+.num-display {
+  font-family: Impact, Haettenschweiler, "Arial Narrow", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+}
+
+.kiosk-score {
+  font-size: clamp(4.5rem, 16vw, 9rem);
+}
+
+@media (orientation: portrait) and (min-height: 1600px) {
+  .kiosk-score {
+    font-size: clamp(7rem, 18vw, 12rem);
+  }
+  .pad-btn {
+    min-height: 4.75rem;
+  }
+}
+
+.app-root[data-layout="kiosk"] .score-num {
+  font-size: clamp(5rem, 14vh, 9rem);
+}
+
+.app-root[data-layout="phone"] .score-num {
+  font-size: clamp(2.6rem, 12vw, 4.2rem);
+}
+
+.app-root[data-layout="tablet"] .score-num {
+  font-size: clamp(3.4rem, 8vw, 6rem);
+}
+
+.standings-num {
+  font-size: clamp(1.75rem, 5vw, 2.75rem);
+}
+
+.app-root[data-layout="kiosk"] .standings-num {
+  font-size: clamp(2.4rem, 4.5vh, 3.4rem);
+}
+
+.app-root[data-layout="phone"] .standings-num {
+  font-size: clamp(1.5rem, 7vw, 2.1rem);
+}
+
+.pad-btn {
+  min-height: 3.5rem;
+  border-radius: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.app-root[data-layout="kiosk"] .pad-btn {
+  min-height: 4.75rem;
+  font-size: 1.35rem;
+  border-radius: 1.1rem;
+}
+
+.safe-pad {
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 99px;
+}
+
+/* Classic Sky/PDC TV scoreboard — rectangular plates, gold type, no gauges. */
+.pdc-wall {
+  background: #03060c;
+  color: #f8fafc;
+}
+
+.pdc-tile {
+  background:
+    linear-gradient(180deg, rgba(21, 35, 58, 0.9) 0%, rgba(7, 11, 20, 0.96) 48%, #05080f 100%);
+  border: 1px solid rgba(201, 162, 39, 0.28);
+  min-height: 0;
+}
+
+.pdc-board-bar {
+  padding: 0.55rem 0.75rem 0.4rem;
+  text-align: center;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.22);
+}
+
+.pdc-board {
+  margin: 0;
+  font-size: clamp(0.72rem, 1.6vw, 1.05rem);
+  font-weight: 800;
+  letter-spacing: 0.38em;
+  text-transform: uppercase;
+  color: #e1b53a;
+}
+
+.pdc-meta {
+  margin: 0.25rem 0 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.55);
+}
+
+.pdc-dot {
+  margin: 0 0.45rem;
+  color: rgba(225, 181, 58, 0.7);
+}
+
+.pdc-duel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  min-height: 0;
+}
+
+.pdc-field {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.55rem;
+  min-height: 0;
+}
+
+.pdc-plate {
+  background: linear-gradient(180deg, #1a2b45 0%, #0c1422 72%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 0;
+}
+
+.pdc-plate.is-throwing {
+  border-color: #d4af37;
+  box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.4);
+  background: linear-gradient(180deg, #24375a 0%, #10182a 70%);
+}
+
+.pdc-plate.is-knocked {
+  border-color: #ff3355;
+}
+
+.pdc-plate.is-out {
+  opacity: 0.45;
+}
+
+.pdc-namebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2.6rem;
+  padding: 0.4rem 0.7rem;
+  background: #0a1220;
+}
+
+.pdc-plate.is-throwing .pdc-namebar {
+  background: linear-gradient(180deg, #f3d56a 0%, #c4921a 100%);
+}
+
+.pdc-throwing-tag {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #141414;
+}
+
+.pdc-score {
+  font-family: Impact, Haettenschweiler, "Arial Narrow", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+  line-height: 0.85;
+  font-size: clamp(3.2rem, 11vw, 7.5rem);
+}
+
+.pdc-wall[data-count="1"] .pdc-score {
+  font-size: clamp(5.2rem, 16vw, 11rem);
+}
+
+.pdc-wall[data-count="2"] .pdc-score {
+  font-size: clamp(3.8rem, 10vw, 8rem);
+}
+
+.pdc-wall[data-count="3"] .pdc-score,
+.pdc-wall[data-count="4"] .pdc-score {
+  font-size: clamp(2.6rem, 7vw, 5.4rem);
+}
+
+.pdc-stand {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pdc-stand-label {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.45);
+}
+
+.pdc-pips {
+  display: flex;
+  gap: 0.22rem;
+}
+
+.pdc-pip {
+  display: block;
+  width: 0.72rem;
+  height: 0.72rem;
+  border: 1px solid #c9a227;
+  background: transparent;
+}
+
+.pdc-pip.on {
+  background: #e8c547;
+  box-shadow: 0 0 6px rgba(232, 197, 71, 0.45);
+}
+
+.pdc-dart {
+  min-width: 2.1rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.35);
+  text-align: center;
+  font-family: Impact, Haettenschweiler, "Arial Narrow", sans-serif;
+  font-size: 1rem;
+  color: #f8fafc;
+}
+
+.pdc-banner {
+  padding: 0.45rem 0.75rem;
+  border-top: 1px solid rgba(201, 162, 39, 0.3);
+  background: rgba(10, 18, 32, 0.9);
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #e1b53a;
+}
+
+@media (orientation: portrait) and (max-width: 700px) {
+  .pdc-duel {
+    grid-template-columns: 1fr;
+  }
+}
+

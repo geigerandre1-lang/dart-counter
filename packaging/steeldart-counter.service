@@ -1,0 +1,16 @@
+[Unit]
+Description=Steeldart Dart-Counter Desktop (Electron)
+After=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/dart-counter
+Environment=STEELDART_MODE=offline
+Environment=STEELDART_KIOSK=1
+Environment=DISPLAY=:0
+ExecStart=%h/dart-counter/packaging/start-desktop.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target
