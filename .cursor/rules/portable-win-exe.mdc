@@ -1,11 +1,13 @@
 ---
-description: Rebuild the Windows portable EXE after app changes; never commit the binary.
+description: Rebuild portable Windows and Raspberry Pi (linux-arm64) apps after changes; never commit binaries.
 alwaysApply: true
 ---
 
-# Portable Windows EXE
+# Portable Windows + Raspberry Pi
 
-After shipping app code changes, rebuild locally with `npm run dist:win`.
+After shipping app code changes, rebuild locally when you need to test the packages:
 
-- Output is `release/*.exe` (~100MB). **Do not commit it** (`release/` is gitignored).
-- CI on `master` publishes it to the rolling GitHub Release **Windows Portable (aktuell)** (`latest`) and as an Actions artifact. Do not kill a `dist:win` already running in another terminal.
+- Windows: `npm run dist:win` → `release/*.exe`
+- Raspberry Pi (linux-arm64): `npm run dist:pi` (or `dist:pi:arm64` / `dist:pi:native` on ARM)
+
+**Do not commit binaries** (`release/` is gitignored). CI on `master` publishes both to the rolling GitHub Release **Portable Builds (aktuell)** (`latest`): Windows portable `.exe` and linux-arm64 `.zip` / `.tar.gz`. Do not kill a `dist:win` or `dist:pi` already running in another terminal.

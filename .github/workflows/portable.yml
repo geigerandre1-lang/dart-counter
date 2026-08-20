@@ -1,0 +1,105 @@
+name: Portable Builds
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  dist-win:
+    name: Windows portable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build portable EXE
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:win
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: steeldart-counter-win-portable
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 90
+
+  dist-pi:
+    name: Linux ARM64 (Raspberry Pi)
+    # Native GitHub-hosted ARM64 (Pi 4/5 64-bit). Avoids x64→arm64 cross-compile.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install native build tools
+        run: sudo apt-get update && sudo apt-get install -y python3 make g++ zip
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build linux-arm64 portable
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:pi:arm64
+
+      - name: Upload Linux ARM64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: steeldart-counter-linux-arm64
+          path: |
+            release/*linux-arm64.zip
+            release/*linux-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    name: Rolling GitHub Release
+    needs: [dist-win, dist-pi]
+    if: always() && (needs.dist-win.result == 'success' || needs.dist-pi.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: steeldart-counter-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish rolling GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Portable Builds (aktuell)
+          body: |
+            Aktuelle portable Desktop-Apps. Werden bei jedem Push auf `master` ersetzt.
+
+            **Windows (x64):** `steeldart-counter-*-win-x64.exe` — doppelklicken, kein Installer.
+
+            **Raspberry Pi 4/5 (64-Bit, linux-arm64):** `steeldart-counter-*-linux-arm64.zip` (oder `.tar.gz`)
+            1. Entpacken (`unzip …` bzw. `tar -xzf …`)
+            2. `chmod +x steeldart-counter start.sh`
+            3. `./start.sh` oder `./steeldart-counter`
+
+            Commit: `${{ github.sha }}`
+          files: artifacts/*
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          make_latest: true
+          target_commitish: ${{ github.sha }}

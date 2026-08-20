@@ -24,30 +24,54 @@ npm run desktop
 
 `npm run pi` ist dasselbe. Ohne erneutes Bauen: `npm run electron`.
 
-## Portable Windows-App (ohne Installer)
+## Portable Apps (Windows und Raspberry Pi)
 
-**Download:** [GitHub Releases](https://github.com/geigerandre1-lang/dart-counter/releases) — Release **Windows Portable (aktuell)** (Tag `latest`). Jeder Push auf `master` ersetzt die portable `.exe` dort.
+**Download:** [GitHub Releases](https://github.com/geigerandre1-lang/dart-counter/releases) — Release **Portable Builds (aktuell)** (Tag `latest`). Jeder Push auf `master` ersetzt die Dateien dort.
 
-Zusätzlich liegt die Datei als Actions-Artifact (Repo → **Actions** → **Portable Windows EXE**).
+Auf der Release-Seite liegen **zwei** Assets:
 
-Lokal (Windows, Node 18+):
+| Plattform | Datei | Start |
+| --- | --- | --- |
+| **Windows** (x64) | `steeldart-counter-*-win-x64.exe` | Doppelklick — **kein Setup, keine Installation** |
+| **Raspberry Pi 4/5** (64-Bit, linux-arm64) | `steeldart-counter-*-linux-arm64.zip` (alternativ `.tar.gz`) | Entpacken, `chmod +x`, `./start.sh` oder `./steeldart-counter` |
+
+Zusätzlich als Actions-Artifacts (Repo → **Actions** → **Portable Builds**).
+
+Binaries gehören **nicht** ins Git (`release/` und `dist/` stehen in `.gitignore`).
+
+### Windows portable lokal bauen
+
+Node 18+:
 
 ```powershell
 npm install
 npm run dist:win
 ```
 
-Ergebnis unter `release/`: eine portable `.exe` (x64), z. B. `steeldart-counter-1.0.0-win-x64.exe`. Die Datei irgendwohin kopieren und doppelklicken — **kein Setup, keine Installation**.
+Ergebnis unter `release/`: z. B. `steeldart-counter-1.0.0-win-x64.exe`. Die Datei irgendwohin kopieren und doppelklicken.
 
-Binaries gehören **nicht** ins Git (`release/` und `dist/` stehen in `.gitignore`). Nicht die `.exe` committen.
+### Raspberry Pi (linux-arm64) — fertiges Paket starten
 
-## Raspberry Pi OS (64-Bit, Pi 4/5)
+**Pi 4/5 mit 64-Bit-OS (`arm64`) ist das Ziel.** Kein Chromium, kein `apt install chromium`.
 
-Die Linux-ARM-Builds sind Ordner bzw. `.tar.gz` — kein Installer. **Pi 4/5 mit 64-Bit-OS (`arm64`) ist das Ziel.** Pi 3 (`armv7l`) wird mitgebaut, wenn der Rechner das hergibt.
+```bash
+unzip steeldart-counter-*-linux-arm64.zip -d ~/steeldart-counter
+cd ~/steeldart-counter
+# Falls die Dateien in einem Unterordner liegen (linux-arm64-unpacked o. ä.), dort hinein:
+# cd linux-arm64-unpacked
+chmod +x steeldart-counter start.sh
+./start.sh
+# oder:
+./steeldart-counter
+```
 
-### Auf dem Pi selbst bauen (empfohlen)
+`.tar.gz` analog: `tar -xzf steeldart-counter-*-linux-arm64.tar.gz`.
 
-Cross-Compile von Windows nach ARM ist oft unzuverlässig (native Module). Am Pi:
+Die Datei `steeldart-counter` *ist* die App.
+
+### Auf dem Pi selbst bauen
+
+CI baut linux-arm64 nativ auf `ubuntu-24.04-arm`. Lokal am Pi (empfohlen gegenüber Cross-Compile):
 
 ```bash
 sudo apt update
@@ -56,30 +80,16 @@ git clone https://github.com/geigerandre1-lang/dart-counter.git dart-counter
 cd dart-counter
 npm install
 npm run dist:pi:native
+# nur 64-Bit: npm run dist:pi:arm64
 ```
 
-`dist:pi` macht dasselbe, überspringt aber das Neuübersetzen nativer Module (Fallback `sql.js` reicht). `dist:pi:native` baut `better-sqlite3` gegen Electron — besser, wenn Compiler-Tools auf dem Pi vorhanden sind.
+`dist:pi` macht dasselbe, überspringt aber das Neuübersetzen nativer Module (Fallback `sql.js` reicht). `dist:pi:native` / `dist:pi:arm64` bauen `better-sqlite3` gegen Electron — besser, wenn Compiler-Tools vorhanden sind.
 
 Ergebnis:
 
 - `release/linux-arm64-unpacked/` — Ordner zum Kopieren
-- `release/steeldart-counter-*-linux-arm64.tar.gz` — Archiv zum Verteilen
-- analog `linux-armv7l` für 32-Bit (Pi 3)
-
-### Ordner kopieren und starten
-
-1. `linux-arm64-unpacked` (oder das `.tar.gz`) auf den Pi kopieren, z. B. nach `~/steeldart-counter`.
-2. Ausführbar machen und starten:
-
-```bash
-cd ~/steeldart-counter
-chmod +x steeldart-counter start.sh
-./start.sh
-# oder:
-./steeldart-counter
-```
-
-Kein Chromium, kein `apt install chromium`. Die Datei `steeldart-counter` *ist* die App.
+- `release/steeldart-counter-*-linux-arm64.zip` / `.tar.gz` — Archive zum Verteilen
+- analog `linux-armv7l` für 32-Bit (Pi 3), wenn `dist:pi` / `dist:pi:native` beide Architekturen bauen
 
 Von Windows aus (nur Konfiguration testen, oft ohne lauffähige ARM-Binary):
 
@@ -87,7 +97,7 @@ Von Windows aus (nur Konfiguration testen, oft ohne lauffähige ARM-Binary):
 npm run dist:pi
 ```
 
-Wenn electron-builder ARM von Windows nicht packen kann: Quellcode auf den Pi legen und dort `npm run dist:pi` bzw. `dist:pi:native` ausführen.
+Wenn electron-builder ARM von Windows nicht packen kann: Quellcode auf den Pi legen und dort `npm run dist:pi:arm64` bzw. `dist:pi:native` ausführen.
 
 Display drehen (Beispiel):
 

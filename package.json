@@ -25,6 +25,7 @@
     "pack:mac": "npm run build && electron-builder --mac",
     "dist:win": "npm run build && electron-builder --win portable --x64",
     "dist:pi": "npm run build && electron-builder --linux dir tar.gz --arm64 --armv7l --config.npmRebuild=false",
+    "dist:pi:arm64": "npm run build && electron-builder --linux dir tar.gz zip --arm64",
     "dist:pi:native": "npm run build && electron-builder --linux dir tar.gz --arm64 --armv7l",
     "dist": "npm run dist:win && npm run dist:pi",
     "test": "vitest run",
@@ -69,6 +70,12 @@
           "arch": [
             "arm64",
             "armv7l"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
           ]
         }
       ],
