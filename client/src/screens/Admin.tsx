@@ -282,7 +282,7 @@ export default function Admin({
       return;
     }
     if (adminPassword.trim()) setAdminPassword("");
-    setPasswordSaved(Boolean(result.state.adminPasswordSet ?? passwordSaved || adminPassword.trim()));
+    setPasswordSaved(Boolean((result.state.adminPasswordSet ?? passwordSaved) || adminPassword.trim()));
     onSettingsSaved?.({
       savedRemoteUrl: result.state.savedRemoteUrl,
       offlinePort: result.state.offlinePort,
