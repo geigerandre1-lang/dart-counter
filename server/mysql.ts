@@ -15,8 +15,12 @@ function env(name: string, fallback?: string): string {
   return value.trim();
 }
 
-/** Decode a Hostinger/env password so Sonderzeichen stay intact; never log the result. */
-export function decodeMysqlPassword(raw: string): string {
+export function isLocalMysqlHost(host: string): boolean {
+  const value = host.trim().toLowerCase();
+  return value === "localhost" || value === "127.0.0.1" || value === "::1";
+}
+
+function stripPasswordWrapper(raw: string): string {
   let value = raw;
   if (
     (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
@@ -24,14 +28,41 @@ export function decodeMysqlPassword(raw: string): string {
   ) {
     value = value.slice(1, -1);
   }
-  if (/%[0-9A-Fa-f]{2}/.test(value)) {
+  return value;
+}
+
+function passwordEncodedFromEnv(): boolean {
+  const value = env("STEELDART_MYSQL_PASSWORD_ENCODED").toLowerCase();
+  return value === "1" || value === "true" || value === "yes";
+}
+
+/**
+ * Sonderzeichen (@ # % &) gehen unverändert an den Treiber — nie in eine URL.
+ * Prozent-Kodierung nur wenn STEELDART_MYSQL_PASSWORD_ENCODED=1 (sonst bleibt %40 ein %40).
+ */
+export function decodeMysqlPassword(raw: string): string {
+  const value = stripPasswordWrapper(raw);
+  if (!passwordEncodedFromEnv()) return value;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/** Rohwert plus optional dekodierte Variante — Access-Denied retried ohne das Passwort zu loggen. */
+export function mysqlPasswordCandidates(raw: string): string[] {
+  const asIs = stripPasswordWrapper(raw);
+  const out = [asIs];
+  if (passwordEncodedFromEnv() || /%[0-9A-Fa-f]{2}/.test(asIs)) {
     try {
-      return decodeURIComponent(value);
+      const decoded = decodeURIComponent(asIs);
+      if (decoded && decoded !== asIs) out.push(decoded);
     } catch {
-      return value;
+      /* keep as-is */
     }
   }
-  return value;
+  return out;
 }
 
 export function maskSecret(value: string): string {
@@ -40,20 +71,24 @@ export function maskSecret(value: string): string {
 }
 
 export function mysqlConfigFromEnv(): MysqlEnvConfig | null {
-  const host = env("STEELDART_MYSQL_HOST", "MYSQL_HOST");
+  const requestedHost = env("STEELDART_MYSQL_HOST", "MYSQL_HOST");
   const user = env("STEELDART_MYSQL_USER", "MYSQL_USER");
   const database = env("STEELDART_MYSQL_DATABASE", "MYSQL_DATABASE");
-  if (!host || !user || !database) return null;
+  if (!requestedHost || !user || !database) return null;
   const portRaw = env("STEELDART_MYSQL_PORT", "MYSQL_PORT");
   const port = portRaw ? Number(portRaw) : 3306;
   const sslRaw = env("STEELDART_MYSQL_SSL", "MYSQL_SSL").toLowerCase();
+  const sslForced = sslRaw === "force";
+  const sslRequested = sslForced || sslRaw === "1" || sslRaw === "true" || sslRaw === "yes";
+  const local = isLocalMysqlHost(requestedHost);
+  const host = requestedHost === "127.0.0.1" || requestedHost === "::1" ? "localhost" : requestedHost;
   return {
     host,
     port: Number.isInteger(port) && port > 0 ? port : 3306,
     user,
     password: decodeMysqlPassword(process.env.STEELDART_MYSQL_PASSWORD ?? process.env.MYSQL_PASSWORD ?? ""),
     database,
-    ssl: sslRaw === "1" || sslRaw === "true" || sslRaw === "yes",
+    ssl: local && !sslForced ? false : sslRequested,
   };
 }
 
@@ -90,6 +125,10 @@ parentPort.on("message", async (msg) => {
   const { reply, lock, type, sql, params, config } = msg;
   try {
     if (type === "init") {
+      if (pool) {
+        try { await pool.end(); } catch (_err) { /* replace pool */ }
+        pool = null;
+      }
       pool = mysql.createPool({
         host: config.host,
         port: config.port,
@@ -207,44 +246,60 @@ function logMysqlOnce(config: MysqlEnvConfig): void {
   );
 }
 
+function workerHandshake(
+  worker: Worker,
+  config: { host: string; port: number; user: string; password: string; database: string; ssl: boolean },
+): { ok: boolean; error?: string } {
+  const { port1, port2 } = new MessageChannel();
+  const lock = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.store(lock, 0, 0);
+  worker.postMessage(
+    { type: "init", reply: port2, lock, config },
+    [port2 as unknown as TransferListItem],
+  );
+  const wait = Atomics.wait(lock, 0, 0, 20_000);
+  if (wait === "timed-out") {
+    port1.close();
+    return { ok: false, error: "MySQL-Timeout beim Verbinden." };
+  }
+  const received = receiveMessageOnPort(port1);
+  port1.close();
+  const payload = (received?.message ?? {}) as { ok?: boolean; error?: string };
+  if (!payload.ok) return { ok: false, error: payload.error || "unbekannt" };
+  return { ok: true };
+}
+
 export async function openMysqlDb(config = mysqlConfigFromEnv()): Promise<MiniDb> {
   if (!config) {
     throw new Error(
       "MySQL ist nicht konfiguriert. STEELDART_MYSQL_HOST, STEELDART_MYSQL_USER, STEELDART_MYSQL_DATABASE setzen.",
     );
   }
-  logMysqlOnce(config);
-  const worker = new Worker(WORKER_SOURCE, { eval: true });
-  const { port1, port2 } = new MessageChannel();
-  const lock = new Int32Array(new SharedArrayBuffer(4));
-  Atomics.store(lock, 0, 0);
-  worker.postMessage(
-    {
-      type: "init",
-      reply: port2,
-      lock,
-      config: {
-        host: config.host,
-        port: config.port,
-        user: config.user,
-        password: config.password,
-        database: config.database,
-        ssl: config.ssl,
-      },
-    },
-    [port2 as unknown as TransferListItem],
+  const requestedHost = env("STEELDART_MYSQL_HOST", "MYSQL_HOST") || config.host;
+  const hosts = [...new Set([config.host, requestedHost].filter(Boolean))];
+  const passwords = mysqlPasswordCandidates(
+    process.env.STEELDART_MYSQL_PASSWORD ?? process.env.MYSQL_PASSWORD ?? "",
   );
-  const wait = Atomics.wait(lock, 0, 0, 20_000);
-  if (wait === "timed-out") {
-    void worker.terminate();
-    throw new Error("MySQL-Timeout beim Verbinden.");
+  const sslForced = env("STEELDART_MYSQL_SSL", "MYSQL_SSL").toLowerCase() === "force";
+  const ssls = isLocalMysqlHost(config.host) && !sslForced ? [false] : [...new Set([config.ssl, false])];
+
+  const worker = new Worker(WORKER_SOURCE, { eval: true });
+  let lastError = "unbekannt";
+  for (const host of hosts) {
+    for (const ssl of ssls) {
+      for (const password of passwords) {
+        const attempt = { host, port: config.port, user: config.user, password, database: config.database, ssl };
+        if (!mysqlLogged) {
+          logMysqlOnce({ ...config, host, ssl, password });
+        } else {
+          console.warn(`mysql: neuer Versuch host=${host} ssl=${ssl ? "on" : "off"} password=${maskSecret(password)}`);
+        }
+        const result = workerHandshake(worker, attempt);
+        if (result.ok) return new MysqlDb(worker);
+        lastError = result.error || lastError;
+      }
+    }
   }
-  const received = receiveMessageOnPort(port1);
-  port1.close();
-  const payload = (received?.message ?? {}) as { ok?: boolean; error?: string };
-  if (!payload.ok) {
-    void worker.terminate();
-    throw new Error(`MySQL-Verbindung fehlgeschlagen: ${payload.error || "unbekannt"}`);
-  }
-  return new MysqlDb(worker);
+  void worker.terminate();
+  throw new Error(`MySQL-Verbindung fehlgeschlagen: ${lastError}`);
 }

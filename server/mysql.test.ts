@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { decodeMysqlPassword, maskSecret, mysqlConfigFromEnv, rewriteMysqlSql } from "./mysql.js";
+import { decodeMysqlPassword, maskSecret, mysqlConfigFromEnv, mysqlPasswordCandidates, rewriteMysqlSql } from "./mysql.js";
 
 const keys = [
   "STEELDART_MYSQL_HOST",
@@ -7,6 +7,8 @@ const keys = [
   "STEELDART_MYSQL_PASSWORD",
   "STEELDART_MYSQL_DATABASE",
   "STEELDART_MYSQL_PORT",
+  "STEELDART_MYSQL_PASSWORD_ENCODED",
+  "STEELDART_MYSQL_SSL",
   "MYSQL_HOST",
   "MYSQL_USER",
   "MYSQL_PASSWORD",
@@ -27,10 +29,19 @@ afterEach(() => {
 });
 
 describe("mysql password masking", () => {
-  it("keeps Sonderzeichen and decodes percent-encoding", () => {
+  it("keeps Sonderzeichen as-is unless encoding is opted in", () => {
     expect(decodeMysqlPassword(`p@ss#wörd!`)).toBe(`p@ss#wörd!`);
     expect(decodeMysqlPassword(`"p@ss#"`)).toBe(`p@ss#`);
+    expect(decodeMysqlPassword("p%40ss%23w%C3%B6rd%21")).toBe("p%40ss%23w%C3%B6rd%21");
+  });
+
+  it("decodes percent-encoding only with STEELDART_MYSQL_PASSWORD_ENCODED=1", () => {
+    process.env.STEELDART_MYSQL_PASSWORD_ENCODED = "1";
     expect(decodeMysqlPassword("p%40ss%23w%C3%B6rd%21")).toBe("p@ss#wörd!");
+  });
+
+  it("retries both raw and decoded passwords when %xx is present", () => {
+    expect(mysqlPasswordCandidates("p%40ss")).toEqual(["p%40ss", "p@ss"]);
   });
 
   it("never prints the password", () => {
@@ -61,7 +72,17 @@ describe("mysql env", () => {
       database: "steeldart",
       password: "p@ss#wörd!",
       port: 3306,
+      ssl: false,
     });
+  });
+
+  it("maps 127.0.0.1 to localhost and turns SSL off", () => {
+    process.env.STEELDART_MYSQL_HOST = "127.0.0.1";
+    process.env.STEELDART_MYSQL_USER = "u123";
+    process.env.STEELDART_MYSQL_DATABASE = "steeldart";
+    process.env.STEELDART_MYSQL_PASSWORD = "p@ss#";
+    process.env.STEELDART_MYSQL_SSL = "1";
+    expect(mysqlConfigFromEnv()).toMatchObject({ host: "localhost", ssl: false });
   });
 
   it("is inactive without host/user/database so desktop stays on sqlite", () => {

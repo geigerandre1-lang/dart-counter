@@ -161,18 +161,28 @@ STEELDART_ADMIN_PASSWORD=dein-geheimes-passwort
 
 `PORT` nicht von Hand setzen. Optional: `STEELDART_SQLJS=1` (sql.js erzwingen, Native-SQLite gar nicht laden).
 
-**MySQL (Hostinger, empfohlen für den Online-Server):** Wenn Host, Benutzer und Datenbankname gesetzt sind, speichert der Server **nicht** in SQLite, sondern in MySQL. Das Passwort wird **nicht** in eine Verbindungs-URL gesteckt (Sonderzeichen wie `@ # % &` bleiben erhalten). Prozent-kodierte Passwörter (`p%40ss`) werden einmal dekodiert. In den Logs erscheint nur `password=********`.
+**MySQL (Hostinger, empfohlen für den Online-Server):** Wenn Host, Benutzer und Datenbankname gesetzt sind, speichert der Server in MySQL. Das Passwort geht **nicht** in eine URL — Sonderzeichen (`@ # % & !`) bleiben erhalten. In den Logs steht nur `password=********`.
+
+Für die **Datenbank derselben Hostinger-Seite** (nicht Remote-Host):
+
+```bash
+STEELDART_MYSQL_HOST=localhost
+STEELDART_MYSQL_USER=uXXXX_dartcounter
+STEELDART_MYSQL_PASSWORD=dein-db-passwort
+STEELDART_MYSQL_DATABASE=uXXXX_dartcounter
+```
+
+`127.0.0.1` wird intern zu `localhost` (MySQL unterscheidet `@localhost` und `@127.0.0.1`). **SSL aus** lassen — lokal auf Hostinger führt SSL zu `Access denied`. Nur bei wirklich remote MySQL: `STEELDART_MYSQL_SSL=force`.
+
+Wenn das Panel Sonderzeichen verschluckt: Passwort percent-encoden (`@` → `%40`) und `STEELDART_MYSQL_PASSWORD_ENCODED=1` setzen. Ohne dieses Flag bleibt `%40` ein `%40`.
 
 ```bash
 STEELDART_MODE=online
 STEELDART_ADMIN_PASSWORD=dein-geheimes-passwort
-STEELDART_MYSQL_HOST=srvXXXX.hstgr.io
+STEELDART_MYSQL_HOST=localhost
 STEELDART_MYSQL_USER=dein-db-benutzer
 STEELDART_MYSQL_PASSWORD=dein-db-passwort
 STEELDART_MYSQL_DATABASE=dein-db-name
-# optional:
-# STEELDART_MYSQL_PORT=3306
-# STEELDART_MYSQL_SSL=1
 ```
 
 Ohne diese drei Pflichtfelder (Host, Benutzer, Datenbank) bleibt SQLite aktiv.
