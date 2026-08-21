@@ -10,7 +10,7 @@ Beim Start wählst du den Modus:
 
 | Desktop-Modus | Was passiert |
 | --- | --- |
-| **Offline** | Die App startet einen lokalen Server. Handys öffnen die LAN-IP oder scannen den **QR-Code**. Alle landen im **einen** lokalen Spiel, ohne Raum-ID. Schließen speichert den Stand 2 Stunden; LAN-Beitritt geht nur bei laufender App. |
+| **Offline** | Nur sichtbar, wenn keine Webserver-URL gesetzt ist **oder** der Online-Server nicht erreichbar ist. Zusätzlich unten rechts (unter Admin) ein dezenter **Offline**-Link mit Bestätigung, falls der Server erreichbar ist. Die App startet dann einen lokalen Server. Handys öffnen die LAN-IP oder scannen den **QR-Code**. Alle landen im **einen** lokalen Spiel, ohne Raum-ID. Schließen speichert den Stand 2 Stunden; LAN-Beitritt geht nur bei laufender App. |
 | **Online** | Kein lokaler Spielserver. Verbindung zum Node-Webserver. **Jede Anlage bekommt einen eigenen Raum.** Raum bleibt 2h nach letzter Aktion (auch ohne Desktop). Dieselbe Anlage innerhalb von 2 Stunden: gleicher Raum; sonst neuer Code. Die Website `/` tritt nicht von allein bei. |
 
 Unter Windows: maximiertes App-Fenster, F11 Vollbild, Escape beendet Vollbild. Auf dem Pi (Linux): Kiosk/Vollbild.
@@ -161,7 +161,23 @@ STEELDART_ADMIN_PASSWORD=dein-geheimes-passwort
 
 `PORT` nicht von Hand setzen. Optional: `STEELDART_SQLJS=1` (sql.js erzwingen, Native-SQLite gar nicht laden).
 
-**SQLite-Datei (Hostinger):** Jedes Redeploy löscht `hbuilds/versions/<uuid>/nodejs/`. Die App legt die Datenbank deshalb **nicht** dort ab. Wenn `cwd` `hbuilds` enthält, wird automatisch
+**MySQL (Hostinger, empfohlen für den Online-Server):** Wenn Host, Benutzer und Datenbankname gesetzt sind, speichert der Server **nicht** in SQLite, sondern in MySQL. Das Passwort wird **nicht** in eine Verbindungs-URL gesteckt (Sonderzeichen wie `@ # % &` bleiben erhalten). Prozent-kodierte Passwörter (`p%40ss`) werden einmal dekodiert. In den Logs erscheint nur `password=********`.
+
+```bash
+STEELDART_MODE=online
+STEELDART_ADMIN_PASSWORD=dein-geheimes-passwort
+STEELDART_MYSQL_HOST=srvXXXX.hstgr.io
+STEELDART_MYSQL_USER=dein-db-benutzer
+STEELDART_MYSQL_PASSWORD=dein-db-passwort
+STEELDART_MYSQL_DATABASE=dein-db-name
+# optional:
+# STEELDART_MYSQL_PORT=3306
+# STEELDART_MYSQL_SSL=1
+```
+
+Ohne diese drei Pflichtfelder (Host, Benutzer, Datenbank) bleibt SQLite aktiv.
+
+**SQLite-Datei (Hostinger, Fallback):** Jedes Redeploy löscht `hbuilds/versions/<uuid>/nodejs/`. Die App legt die Datenbank deshalb **nicht** dort ab. Wenn `cwd` `hbuilds` enthält, wird automatisch
 
 `…/domains/dart-counter.turniertool.eu/data/steeldart.sqlite`
 

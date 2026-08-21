@@ -24,6 +24,7 @@ import {
   type PlayerVisitStats,
 } from "../shared/index.js";
 import type { GameType, MatchState, Player } from "../shared/types.js";
+import { mysqlConfigured, openMysqlDb } from "./mysql.js";
 import { defaultDbPath, openMiniDb, type MiniDb } from "./sqlite.js";
 
 export interface RegisteredPlayer extends Player {
@@ -203,6 +204,88 @@ CREATE TABLE IF NOT EXISTS boards (
 );
 `;
 
+const MYSQL_SCHEMA = `
+CREATE TABLE IF NOT EXISTS players (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(191) NOT NULL,
+  name_key VARCHAR(191) NOT NULL,
+  created_at BIGINT NOT NULL,
+  team_id VARCHAR(64),
+  pass_nr VARCHAR(191)
+);
+CREATE TABLE IF NOT EXISTS player_stats (
+  player_id VARCHAR(64) PRIMARY KEY,
+  total_points BIGINT NOT NULL DEFAULT 0,
+  darts_thrown BIGINT NOT NULL DEFAULT 0,
+  misses BIGINT NOT NULL DEFAULT 0,
+  visits BIGINT NOT NULL DEFAULT 0,
+  plus_60 BIGINT NOT NULL DEFAULT 0,
+  plus_80 BIGINT NOT NULL DEFAULT 0,
+  plus_100 BIGINT NOT NULL DEFAULT 0,
+  plus_120 BIGINT NOT NULL DEFAULT 0,
+  plus_140 BIGINT NOT NULL DEFAULT 0,
+  score_180 BIGINT NOT NULL DEFAULT 0,
+  matches BIGINT NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS match_analyses (
+  id VARCHAR(64) PRIMARY KEY,
+  match_id VARCHAR(64) NOT NULL UNIQUE,
+  played_at BIGINT NOT NULL,
+  mode VARCHAR(32) NOT NULL,
+  game_type VARCHAR(64) NOT NULL,
+  opponents MEDIUMTEXT NOT NULL,
+  player_stats MEDIUMTEXT NOT NULL,
+  winner_id VARCHAR(64),
+  scoreline VARCHAR(191) NOT NULL DEFAULT '',
+  board_id VARCHAR(64),
+  board_name VARCHAR(191)
+);
+CREATE TABLE IF NOT EXISTS match_analysis_players (
+  analysis_id VARCHAR(64) NOT NULL,
+  player_id VARCHAR(64) NOT NULL,
+  PRIMARY KEY (analysis_id, player_id)
+);
+CREATE TABLE IF NOT EXISTS teams (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(191) NOT NULL,
+  name_key VARCHAR(191) NOT NULL UNIQUE,
+  created_at BIGINT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS spieltage (
+  id VARCHAR(64) PRIMARY KEY,
+  date_key VARCHAR(32) NOT NULL,
+  started_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  mode VARCHAR(32) NOT NULL,
+  summary MEDIUMTEXT NOT NULL,
+  payload MEDIUMTEXT NOT NULL,
+  active TINYINT NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS spieltag_rooms (
+  spieltag_id VARCHAR(64) NOT NULL,
+  room_code VARCHAR(32) NOT NULL,
+  PRIMARY KEY (spieltag_id, room_code)
+);
+CREATE TABLE IF NOT EXISTS match_reports (
+  id VARCHAR(64) PRIMARY KEY,
+  match_id VARCHAR(64) NOT NULL UNIQUE,
+  played_at BIGINT NOT NULL,
+  mode VARCHAR(32) NOT NULL,
+  game_type VARCHAR(64) NOT NULL,
+  board_id VARCHAR(64),
+  board_name VARCHAR(191),
+  summary MEDIUMTEXT NOT NULL,
+  payload MEDIUMTEXT NOT NULL,
+  synced TINYINT NOT NULL DEFAULT 1,
+  spieltag_id VARCHAR(64)
+);
+CREATE TABLE IF NOT EXISTS boards (
+  id VARCHAR(64) PRIMARY KEY,
+  name VARCHAR(191) NOT NULL,
+  last_seen BIGINT NOT NULL
+);
+`;
+
 const PLAYER_STAT_COLUMNS: Array<[string, string]> = [
   ["matches_won", "INTEGER NOT NULL DEFAULT 0"],
   ["matches_lost", "INTEGER NOT NULL DEFAULT 0"],
@@ -220,14 +303,26 @@ const PLAYER_STAT_COLUMNS: Array<[string, string]> = [
 ];
 
 function tableColumns(db: MiniDb, table: string): Set<string> {
+  if (db.dialect === "mysql") {
+    const rows = db.all<{ COLUMN_NAME?: string; column_name?: string }>(
+      "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+      table,
+    );
+    return new Set(rows.map((row) => String(row.COLUMN_NAME ?? row.column_name ?? "")));
+  }
   const rows = db.all<{ name?: string; NAME?: string }>(`PRAGMA table_info(${table})`);
   return new Set(rows.map((row) => String(row.name ?? row.NAME ?? "")));
+}
+
+function mysqlDdl(ddl: string): string {
+  return ddl.replace(/\bINTEGER\b/gi, "BIGINT").replace(/\bTEXT\b/gi, "VARCHAR(191)");
 }
 
 function ensureColumn(db: MiniDb, table: string, column: string, ddl: string): void {
   const cols = tableColumns(db, table);
   if (cols.has(column)) return;
-  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  const type = db.dialect === "mysql" ? mysqlDdl(ddl) : ddl;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 }
 
 function dateKey(ts = Date.now()): string {
@@ -265,6 +360,20 @@ function playerIndexColumns(db: MiniDb, indexName: string): string[] {
 
 function migratePlayersPassNr(db: MiniDb): void {
   ensureColumn(db, "players", "pass_nr", "TEXT");
+  if (db.dialect === "mysql") {
+    db.exec("UPDATE players SET pass_nr = NULL WHERE pass_nr IS NOT NULL AND TRIM(pass_nr) = ''");
+    try {
+      db.exec("CREATE UNIQUE INDEX players_name_key ON players (name_key)");
+    } catch {
+      /* already exists */
+    }
+    try {
+      db.exec("CREATE UNIQUE INDEX players_pass_nr ON players (pass_nr)");
+    } catch {
+      /* already exists — MySQL erlaubt mehrere NULL */
+    }
+    return;
+  }
   db.exec("UPDATE players SET pass_nr = NULL WHERE pass_nr IS NOT NULL AND trim(pass_nr) = ''");
 
   const tableSql = String(
@@ -337,6 +446,7 @@ function migrate(db: MiniDb): void {
 
 function migrateSpieltageSessions(db: MiniDb): void {
   ensureColumn(db, "spieltage", "active", "INTEGER NOT NULL DEFAULT 0");
+  if (db.dialect === "mysql") return;
   const tableSql = String(
     db.get<{ sql?: string }>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'spieltage'")?.sql ?? "",
   );
@@ -377,6 +487,15 @@ function migrateSpieltageSessions(db: MiniDb): void {
 }
 
 function flattenClubNesting(db: MiniDb): void {
+  if (db.dialect === "mysql") {
+    db.exec(`CREATE TABLE IF NOT EXISTS teams (
+      id VARCHAR(64) PRIMARY KEY,
+      name VARCHAR(191) NOT NULL,
+      name_key VARCHAR(191) NOT NULL UNIQUE,
+      created_at BIGINT NOT NULL
+    )`);
+    return;
+  }
   if (tableExists(db, "club_teams")) {
     db.exec(`CREATE TABLE IF NOT EXISTS teams_flat (
       id TEXT PRIMARY KEY,
@@ -440,6 +559,13 @@ function flattenClubNesting(db: MiniDb): void {
 }
 
 function tableExists(db: MiniDb, name: string): boolean {
+  if (db.dialect === "mysql") {
+    const row = db.get<{ name?: string; TABLE_NAME?: string }>(
+      "SELECT TABLE_NAME AS name FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?",
+      name,
+    );
+    return Boolean(row?.name ?? row?.TABLE_NAME);
+  }
   const row = db.get<{ name: string }>(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
     name,
@@ -501,7 +627,7 @@ function lifetimeFromRow(row: Record<string, unknown>): LifetimeRow {
 
 export class StatsStore {
   constructor(private readonly db: MiniDb) {
-    this.db.exec(SCHEMA);
+    this.db.exec(db.dialect === "mysql" ? MYSQL_SCHEMA : SCHEMA);
     migrate(this.db);
     this.seedDefaultPlayers();
     this.seedBuiltInTrainingTeam();
@@ -1842,7 +1968,7 @@ function isUniqueConstraint(err: unknown): boolean {
 }
 
 export async function openStatsStore(filePath = defaultDbPath()): Promise<StatsStore> {
-  const db = await openMiniDb(filePath);
+  const db = mysqlConfigured() ? await openMysqlDb() : await openMiniDb(filePath);
   return new StatsStore(db);
 }
 

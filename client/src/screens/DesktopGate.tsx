@@ -41,7 +41,11 @@ export default function DesktopGate({
   const [url, setUrl] = useState(savedRemoteUrl);
   const [onlinePassword, setOnlinePassword] = useState(savedAdminPassword);
   const [savingOnline, setSavingOnline] = useState(false);
+  const [onlineReachable, setOnlineReachable] = useState(false);
+  const [onlineProbeDone, setOnlineProbeDone] = useState(!url.trim());
+  const [offlineConfirm, setOfflineConfirm] = useState(false);
   const showOnline = onlineConfigured || url.trim().length > 0;
+  const showOffline = !url.trim() || (onlineProbeDone && !onlineReachable);
 
   useEffect(() => {
     setUrl(savedRemoteUrl);
@@ -50,6 +54,44 @@ export default function DesktopGate({
   useEffect(() => {
     if (savedAdminPassword) setOnlinePassword(savedAdminPassword);
   }, [savedAdminPassword]);
+
+  useEffect(() => {
+    const target = url.trim();
+    if (!target) {
+      setOnlineReachable(false);
+      setOnlineProbeDone(true);
+      return;
+    }
+    const desktop = window.steeldartDesktop;
+    let cancelled = false;
+    let interval = 0;
+    setOnlineProbeDone(false);
+    const probe = async () => {
+      try {
+        const result = desktop?.probeOnline
+          ? await desktop.probeOnline(target)
+          : { reachable: false };
+        if (!cancelled) {
+          setOnlineReachable(Boolean(result.reachable));
+          setOnlineProbeDone(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setOnlineReachable(false);
+          setOnlineProbeDone(true);
+        }
+      }
+    };
+    const delay = window.setTimeout(() => {
+      void probe();
+      interval = window.setInterval(() => void probe(), 8000);
+    }, 500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(delay);
+      window.clearInterval(interval);
+    };
+  }, [url]);
 
   const persistOnlineSettings = async (): Promise<boolean> => {
     const desktop = window.steeldartDesktop;
@@ -116,6 +158,7 @@ export default function DesktopGate({
       </header>
 
       <div className="grid gap-4">
+        {showOffline ? (
         <button
           className="rounded-3xl bg-crimson px-6 py-7 text-left text-white disabled:opacity-60"
           disabled={busy}
@@ -124,9 +167,16 @@ export default function DesktopGate({
           <div className="text-xs font-bold uppercase tracking-[0.25em]">Offline</div>
           <div className="mt-1 font-display text-4xl">Lokaler Server</div>
           <p className="mt-2 text-sm text-white/80">
-            Startet den Server auf diesem Gerät. Handys öffnen die LAN-IP — gleiches Spiel, ohne Raum-ID.
+            {url.trim()
+              ? "Webserver nicht erreichbar. Startet den Server auf diesem Gerät."
+              : "Startet den Server auf diesem Gerät. Handys öffnen die LAN-IP — gleiches Spiel, ohne Raum-ID."}
           </p>
         </button>
+        ) : (
+          <p className="rounded-2xl border border-amber-glow/20 bg-ink-800 px-4 py-3 text-sm text-slate-400">
+            Online-Server erreichbar — Offline-Modus ist ausgeblendet.
+          </p>
+        )}
 
         <div className="rounded-3xl border border-white/10 bg-ink-800 p-6 text-left">
           <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-400">Online</div>
@@ -167,7 +217,7 @@ export default function DesktopGate({
         <div className="rounded-2xl bg-crimson/20 px-4 py-3 text-center text-crimson">{adminError || error}</div>
       )}
 
-      <div className="absolute bottom-4 right-4 text-right">
+      <div className="absolute bottom-4 right-4 flex flex-col items-end gap-1 text-right">
         {!adminOpen ? (
           <button
             type="button"
@@ -219,7 +269,47 @@ export default function DesktopGate({
             </div>
           </form>
         )}
+        {!showOffline && (
+          <button
+            type="button"
+            className="text-[11px] tracking-wide text-slate-600 underline decoration-slate-700 underline-offset-4 hover:text-slate-400 disabled:opacity-40"
+            disabled={busy}
+            onClick={() => setOfflineConfirm(true)}
+          >
+            Offline
+          </button>
+        )}
       </div>
+
+      {offlineConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-6">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-ink-800 p-6 text-left">
+            <h2 className="font-display text-3xl text-white">Offline starten?</h2>
+            <p className="mt-3 text-sm text-slate-400">
+              Der Online-Server ist erreichbar. Offline startet einen lokalen Server auf diesem Gerät —
+              Handys sehen dann nicht den Webserver-Raum.
+            </p>
+            <button
+              type="button"
+              className="mt-6 min-h-touch w-full rounded-2xl bg-crimson font-bold text-white disabled:opacity-60"
+              disabled={busy}
+              onClick={() => {
+                setOfflineConfirm(false);
+                onOffline();
+              }}
+            >
+              Trotzdem Offline starten
+            </button>
+            <button
+              type="button"
+              className="mt-3 min-h-touch w-full rounded-2xl bg-ink-700 font-bold text-white"
+              onClick={() => setOfflineConfirm(false)}
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

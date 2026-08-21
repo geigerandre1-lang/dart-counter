@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(path.join(process.cwd(), "package.json"));
 
+export type DbDialect = "sqlite" | "mysql";
+
 export interface MiniDb {
+  readonly dialect: DbDialect;
   exec(sql: string): void;
   run(sql: string, ...params: unknown[]): { changes: number };
   get<T>(sql: string, ...params: unknown[]): T | undefined;
@@ -15,6 +18,7 @@ export interface MiniDb {
 }
 
 class BetterSqliteDb implements MiniDb {
+  readonly dialect = "sqlite" as const;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(private readonly db: any) {}
 
@@ -41,6 +45,7 @@ class BetterSqliteDb implements MiniDb {
 }
 
 class SqlJsDb implements MiniDb {
+  readonly dialect = "sqlite" as const;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

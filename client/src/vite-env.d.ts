@@ -44,6 +44,7 @@ interface SteeldartDesktop {
     adminPassword?: string;
   }>;
   offlineStatus?: () => Promise<{ resume: boolean; savedAt: number | null }>;
+  probeOnline?: (url?: string) => Promise<{ reachable: boolean; origin: string }>;
   startOffline?: (opts?: { resume?: boolean }) => Promise<DesktopResult>;
   connectOnline?: (url?: string) => Promise<DesktopResult>;
   rememberOnline?: (origin: string, code: string) => Promise<unknown>;

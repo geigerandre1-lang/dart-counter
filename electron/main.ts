@@ -313,6 +313,18 @@ function registerIpc(): void {
     return { resume: Boolean(save), savedAt: save?.savedAt ?? null };
   });
 
+  ipcMain.handle("desktop:probeOnline", async (_evt, url?: string) => {
+    const raw = String(url ?? configuredRemoteUrl()).trim();
+    if (!raw) return { reachable: false, origin: "" };
+    try {
+      const origin = normalizeServerUrl(raw);
+      const info = await fetchInfo(origin);
+      return { reachable: Boolean(info && info.mode === "online"), origin };
+    } catch {
+      return { reachable: false, origin: raw };
+    }
+  });
+
   ipcMain.handle("desktop:startOffline", async (_evt, opts?: { resume?: boolean }) => {
     try {
       const next = await startOffline({ resume: Boolean(opts?.resume) });

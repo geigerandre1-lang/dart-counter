@@ -35,6 +35,7 @@ import {
   revokeAdminToken,
   roomCapError,
 } from "./admin.js";
+import { mysqlConfigured } from "./mysql.js";
 import { defaultDbPath } from "./sqlite.js";
 import { openStatsStore, type StatsStore } from "./store.js";
 
@@ -318,7 +319,7 @@ async function bootServer(options: StartServerOptions = {}): Promise<StartedServ
   );
   const persistPath = options.persistPath ?? null;
   const dbFile = options.dbPath ?? defaultDbPath();
-  bootLog(`sqlite ${dbFile}`);
+  bootLog(mysqlConfigured() ? "db mysql (Hostinger)" : `sqlite ${dbFile}`);
   const store = await openStatsStore(dbFile);
 
   const rooms = new Map<string, Room>();

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("steeldartDesktop", {
   kiosk: true,
   getState: () => ipcRenderer.invoke("desktop:getState"),
   offlineStatus: () => ipcRenderer.invoke("desktop:offlineStatus"),
+  probeOnline: (url?: string) => ipcRenderer.invoke("desktop:probeOnline", url),
   startOffline: (opts?: { resume?: boolean }) => ipcRenderer.invoke("desktop:startOffline", opts),
   connectOnline: (url?: string) => ipcRenderer.invoke("desktop:connectOnline", url),
   rememberOnline: (origin: string, code: string) =>
