@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { decodeMysqlPassword, maskSecret, mysqlConfigFromEnv, mysqlPasswordCandidates, mysqlSocketCandidates, rewriteMysqlSql } from "./mysql.js";
+import { decodeMysqlPassword, maskSecret, mysqlConfigFromEnv, mysqlPasswordCandidates, mysqlSocketCandidates, passwordLogHint, rewriteMysqlSql } from "./mysql.js";
 
 const keys = [
   "STEELDART_MYSQL_HOST",
@@ -7,7 +7,9 @@ const keys = [
   "STEELDART_MYSQL_PASSWORD",
   "STEELDART_MYSQL_DATABASE",
   "STEELDART_MYSQL_PORT",
+  "STEELDART_MYSQL_PASSWORD_B64",
   "STEELDART_MYSQL_PASSWORD_ENCODED",
+  "STEELDART_MYSQL_SSL",
   "STEELDART_MYSQL_SOCKET",
   "MYSQL_HOST",
   "MYSQL_USER",
@@ -44,10 +46,19 @@ describe("mysql password masking", () => {
     expect(mysqlPasswordCandidates("p%40ss")).toEqual(["p%40ss", "p@ss"]);
   });
 
+  it("prefers base64 so Hostinger cannot eat $ or #", () => {
+    process.env.STEELDART_MYSQL_PASSWORD_B64 = Buffer.from("p@ss#wörd!", "utf8").toString("base64");
+    expect(decodeMysqlPassword("ignored")).toBe("p@ss#wörd!");
+    expect(mysqlPasswordCandidates("ignored")[0]).toBe("p@ss#wörd!");
+  });
+
   it("never prints the password", () => {
     const secret = "p@ss#wörd!";
     expect(maskSecret(secret)).not.toContain("@");
     expect(maskSecret(secret)).toMatch(/^\*+$/);
+    expect(passwordLogHint(secret)).toMatch(/\$=no/);
+    expect(passwordLogHint(secret)).toMatch(/#=yes/);
+    expect(passwordLogHint(secret)).not.toContain(secret);
   });
 });
 

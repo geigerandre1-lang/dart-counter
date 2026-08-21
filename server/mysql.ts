@@ -30,7 +30,17 @@ function stripPasswordWrapper(raw: string): string {
   ) {
     value = value.slice(1, -1);
   }
-  return value;
+  return value.replace(/\r?\n$/, "");
+}
+
+function passwordFromBase64(): string {
+  const b64 = env("STEELDART_MYSQL_PASSWORD_B64", "MYSQL_PASSWORD_B64");
+  if (!b64) return "";
+  try {
+    return Buffer.from(b64, "base64").toString("utf8").replace(/\r?\n$/, "");
+  } catch {
+    return "";
+  }
 }
 
 function passwordEncodedFromEnv(): boolean {
@@ -41,8 +51,11 @@ function passwordEncodedFromEnv(): boolean {
 /**
  * Sonderzeichen (@ # % &) gehen unverändert an den Treiber — nie in eine URL.
  * Prozent-Kodierung nur wenn STEELDART_MYSQL_PASSWORD_ENCODED=1 (sonst bleibt %40 ein %40).
+ * Hostinger-Panel: STEELDART_MYSQL_PASSWORD_B64 (UTF-8, Base64), wenn $ # & verschluckt werden.
  */
 export function decodeMysqlPassword(raw: string): string {
+  const fromB64 = passwordFromBase64();
+  if (fromB64) return fromB64;
   const value = stripPasswordWrapper(raw);
   if (!passwordEncodedFromEnv()) return value;
   try {
@@ -54,17 +67,25 @@ export function decodeMysqlPassword(raw: string): string {
 
 /** Rohwert plus optional dekodierte Variante — Access-Denied retried ohne das Passwort zu loggen. */
 export function mysqlPasswordCandidates(raw: string): string[] {
+  const out: string[] = [];
+  const fromB64 = passwordFromBase64();
+  if (fromB64) out.push(fromB64);
   const asIs = stripPasswordWrapper(raw);
-  const out = [asIs];
+  if (asIs && !out.includes(asIs)) out.push(asIs);
   if (passwordEncodedFromEnv() || /%[0-9A-Fa-f]{2}/.test(asIs)) {
     try {
       const decoded = decodeURIComponent(asIs);
-      if (decoded && decoded !== asIs) out.push(decoded);
+      if (decoded && !out.includes(decoded)) out.push(decoded);
     } catch {
       /* keep as-is */
     }
   }
-  return out;
+  return out.filter((value) => value.length > 0);
+}
+
+export function passwordLogHint(value: string): string {
+  const bytes = Buffer.byteLength(value, "utf8");
+  return `len=${value.length} bytes=${bytes} $=${value.includes("$") ? "yes" : "no"} #=${value.includes("#") ? "yes" : "no"} @=${value.includes("@") ? "yes" : "no"}`;
 }
 
 export function maskSecret(value: string): string {
@@ -264,7 +285,7 @@ function logMysqlOnce(config: MysqlEnvConfig): void {
   mysqlLogged = true;
   const via = config.socketPath ? `socket=${config.socketPath}` : `host=${config.host} port=${config.port}`;
   console.log(
-    `mysql: ${via} user=${config.user} database=${config.database} password=${maskSecret(config.password)} ssl=${config.ssl ? "on" : "off"}`,
+    `mysql: ${via} user=${config.user} database=${config.database} password=${maskSecret(config.password)} ${passwordLogHint(config.password)} ssl=${config.ssl ? "on" : "off"}`,
   );
 }
 
@@ -308,6 +329,11 @@ export async function openMysqlDb(config = mysqlConfigFromEnv()): Promise<MiniDb
   const passwords = mysqlPasswordCandidates(
     process.env.STEELDART_MYSQL_PASSWORD ?? process.env.MYSQL_PASSWORD ?? "",
   );
+  if (!passwords.length) {
+    throw new Error(
+      "MySQL-Passwort fehlt. STEELDART_MYSQL_PASSWORD oder STEELDART_MYSQL_PASSWORD_B64 in hPanel setzen.",
+    );
+  }
   const local = isLocalMysqlHost(config.host);
   const attempts: Array<{
     host: string;
@@ -371,5 +397,13 @@ export async function openMysqlDb(config = mysqlConfigFromEnv()): Promise<MiniDb
     lastError = result.error || lastError;
   }
   void worker.terminate();
+  if (/access denied/i.test(lastError)) {
+    throw new Error(
+      "MySQL hat den User über den Socket erkannt (@localhost), aber das Passwort abgelehnt. " +
+        "Bitte das Passwort des Datenbank-Users aus hPanel → Datenbanken verwenden (nicht das Hosting-Passwort). " +
+        "Wenn es $ # oder & enthält: Passwort in Base64 und STEELDART_MYSQL_PASSWORD_B64 setzen, STEELDART_MYSQL_PASSWORD leer lassen. " +
+        lastError,
+    );
+  }
   throw new Error(`MySQL-Verbindung fehlgeschlagen: ${lastError}`);
 }

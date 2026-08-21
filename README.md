@@ -174,7 +174,23 @@ STEELDART_MYSQL_DATABASE=uXXXX_dartcounter
 
 `127.0.0.1` / `localhost` werden **nicht per TCP** verbunden (sonst `'user'@'::1'` / `@'127.0.0.1'` und Access denied). Lokal nutzt die App den Unix-Socket (`/tmp/mysql.sock` oder `/var/run/mysqld/mysqld.sock`). Optional: `STEELDART_MYSQL_SOCKET=/pfad/mysql.sock`. **SSL aus** lassen.
 
-Wenn das Panel Sonderzeichen verschluckt: Passwort percent-encoden (`@` → `%40`) und `STEELDART_MYSQL_PASSWORD_ENCODED=1` setzen. Ohne dieses Flag bleibt `%40` ein `%40`.
+Passwort: das des **MySQL-Users** (hPanel → Datenbanken), nicht das Hosting-Login. Roh einfügen, ohne Anführungszeichen.
+
+Wenn das Panel `$` `#` `&` verschluckt — **Base64** (empfohlen auf Hostinger):
+
+PowerShell:
+
+```powershell
+[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes('dein-db-passwort'))
+```
+
+Dann nur:
+
+```bash
+STEELDART_MYSQL_PASSWORD_B64=ZGVpbi1kYi1wYXNzd29ydA==
+```
+
+`STEELDART_MYSQL_PASSWORD` in dem Fall leer lassen / löschen.
 
 ```bash
 STEELDART_MODE=online
