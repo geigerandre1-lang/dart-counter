@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { MessageChannel, Worker, receiveMessageOnPort, type TransferListItem } from "node:worker_threads";
 import type { MiniDb } from "./sqlite.js";
 
@@ -8,6 +9,7 @@ export interface MysqlEnvConfig {
   password: string;
   database: string;
   ssl: boolean;
+  socketPath?: string;
 }
 
 function env(name: string, fallback?: string): string {
@@ -92,6 +94,18 @@ export function mysqlConfigFromEnv(): MysqlEnvConfig | null {
   };
 }
 
+export function mysqlSocketCandidates(): string[] {
+  const fromEnv = env("STEELDART_MYSQL_SOCKET", "MYSQL_SOCKET");
+  const paths = [
+    fromEnv,
+    "/var/run/mysqld/mysqld.sock",
+    "/run/mysqld/mysqld.sock",
+    "/tmp/mysql.sock",
+    "/var/lib/mysql/mysql.sock",
+  ].filter(Boolean);
+  return [...new Set(paths)];
+}
+
 export function mysqlConfigured(): boolean {
   return mysqlConfigFromEnv() != null;
 }
@@ -129,19 +143,26 @@ parentPort.on("message", async (msg) => {
         try { await pool.end(); } catch (_err) { /* replace pool */ }
         pool = null;
       }
-      pool = mysql.createPool({
-        host: config.host,
-        port: config.port,
-        user: config.user,
-        password: config.password,
-        database: config.database,
-        waitForConnections: true,
-        connectionLimit: 4,
-        charset: "utf8mb4",
-        supportBigNumbers: true,
-        bigNumberStrings: false,
-        ssl: config.ssl ? { rejectUnauthorized: false } : undefined,
-      });
+      pool = mysql.createPool((() => {
+        const opts = {
+          user: config.user,
+          password: config.password,
+          database: config.database,
+          waitForConnections: true,
+          connectionLimit: 4,
+          charset: "utf8mb4",
+          supportBigNumbers: true,
+          bigNumberStrings: false,
+        };
+        if (config.socketPath) {
+          opts.socketPath = config.socketPath;
+          return opts;
+        }
+        opts.host = config.host;
+        opts.port = config.port;
+        if (config.ssl) opts.ssl = { rejectUnauthorized: false };
+        return opts;
+      })());
       await pool.query("SELECT 1");
       reply.postMessage({ ok: true });
     } else if (type === "exec") {
@@ -241,14 +262,23 @@ let mysqlLogged = false;
 function logMysqlOnce(config: MysqlEnvConfig): void {
   if (mysqlLogged) return;
   mysqlLogged = true;
+  const via = config.socketPath ? `socket=${config.socketPath}` : `host=${config.host} port=${config.port}`;
   console.log(
-    `mysql: host=${config.host} port=${config.port} user=${config.user} database=${config.database} password=${maskSecret(config.password)} ssl=${config.ssl ? "on" : "off"}`,
+    `mysql: ${via} user=${config.user} database=${config.database} password=${maskSecret(config.password)} ssl=${config.ssl ? "on" : "off"}`,
   );
 }
 
 function workerHandshake(
   worker: Worker,
-  config: { host: string; port: number; user: string; password: string; database: string; ssl: boolean },
+  config: {
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+    database: string;
+    ssl: boolean;
+    socketPath?: string;
+  },
 ): { ok: boolean; error?: string } {
   const { port1, port2 } = new MessageChannel();
   const lock = new Int32Array(new SharedArrayBuffer(4));
@@ -275,30 +305,70 @@ export async function openMysqlDb(config = mysqlConfigFromEnv()): Promise<MiniDb
       "MySQL ist nicht konfiguriert. STEELDART_MYSQL_HOST, STEELDART_MYSQL_USER, STEELDART_MYSQL_DATABASE setzen.",
     );
   }
-  const requestedHost = env("STEELDART_MYSQL_HOST", "MYSQL_HOST") || config.host;
-  const hosts = [...new Set([config.host, requestedHost].filter(Boolean))];
   const passwords = mysqlPasswordCandidates(
     process.env.STEELDART_MYSQL_PASSWORD ?? process.env.MYSQL_PASSWORD ?? "",
   );
-  const sslForced = env("STEELDART_MYSQL_SSL", "MYSQL_SSL").toLowerCase() === "force";
-  const ssls = isLocalMysqlHost(config.host) && !sslForced ? [false] : [...new Set([config.ssl, false])];
+  const local = isLocalMysqlHost(config.host);
+  const attempts: Array<{
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+    database: string;
+    ssl: boolean;
+    socketPath?: string;
+  }> = [];
+
+  if (local) {
+    const sockets = mysqlSocketCandidates().filter((file) => {
+      try {
+        return fs.existsSync(file);
+      } catch {
+        return false;
+      }
+    });
+    const socketList = sockets.length ? sockets : mysqlSocketCandidates();
+    for (const socketPath of socketList) {
+      for (const password of passwords) {
+        attempts.push({
+          host: "localhost",
+          port: config.port,
+          user: config.user,
+          password,
+          database: config.database,
+          ssl: false,
+          socketPath,
+        });
+      }
+    }
+  } else {
+    const sslForced = env("STEELDART_MYSQL_SSL", "MYSQL_SSL").toLowerCase() === "force";
+    const ssls = sslForced ? [true] : [...new Set([config.ssl, false])];
+    for (const ssl of ssls) {
+      for (const password of passwords) {
+        attempts.push({
+          host: config.host,
+          port: config.port,
+          user: config.user,
+          password,
+          database: config.database,
+          ssl,
+        });
+      }
+    }
+  }
 
   const worker = new Worker(WORKER_SOURCE, { eval: true });
   let lastError = "unbekannt";
-  for (const host of hosts) {
-    for (const ssl of ssls) {
-      for (const password of passwords) {
-        const attempt = { host, port: config.port, user: config.user, password, database: config.database, ssl };
-        if (!mysqlLogged) {
-          logMysqlOnce({ ...config, host, ssl, password });
-        } else {
-          console.warn(`mysql: neuer Versuch host=${host} ssl=${ssl ? "on" : "off"} password=${maskSecret(password)}`);
-        }
-        const result = workerHandshake(worker, attempt);
-        if (result.ok) return new MysqlDb(worker);
-        lastError = result.error || lastError;
-      }
+  for (const attempt of attempts) {
+    if (!mysqlLogged) logMysqlOnce({ ...config, ...attempt });
+    else {
+      const via = attempt.socketPath ? `socket=${attempt.socketPath}` : `host=${attempt.host}`;
+      console.warn(`mysql: neuer Versuch ${via} ssl=${attempt.ssl ? "on" : "off"} password=${maskSecret(attempt.password)}`);
     }
+    const result = workerHandshake(worker, attempt);
+    if (result.ok) return new MysqlDb(worker);
+    lastError = result.error || lastError;
   }
   void worker.terminate();
   throw new Error(`MySQL-Verbindung fehlgeschlagen: ${lastError}`);

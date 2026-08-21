@@ -172,7 +172,7 @@ STEELDART_MYSQL_PASSWORD=dein-db-passwort
 STEELDART_MYSQL_DATABASE=uXXXX_dartcounter
 ```
 
-`127.0.0.1` wird intern zu `localhost` (MySQL unterscheidet `@localhost` und `@127.0.0.1`). **SSL aus** lassen — lokal auf Hostinger führt SSL zu `Access denied`. Nur bei wirklich remote MySQL: `STEELDART_MYSQL_SSL=force`.
+`127.0.0.1` / `localhost` werden **nicht per TCP** verbunden (sonst `'user'@'::1'` / `@'127.0.0.1'` und Access denied). Lokal nutzt die App den Unix-Socket (`/tmp/mysql.sock` oder `/var/run/mysqld/mysqld.sock`). Optional: `STEELDART_MYSQL_SOCKET=/pfad/mysql.sock`. **SSL aus** lassen.
 
 Wenn das Panel Sonderzeichen verschluckt: Passwort percent-encoden (`@` → `%40`) und `STEELDART_MYSQL_PASSWORD_ENCODED=1` setzen. Ohne dieses Flag bleibt `%40` ein `%40`.
 

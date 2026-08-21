@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { decodeMysqlPassword, maskSecret, mysqlConfigFromEnv, mysqlPasswordCandidates, rewriteMysqlSql } from "./mysql.js";
+import { decodeMysqlPassword, maskSecret, mysqlConfigFromEnv, mysqlPasswordCandidates, mysqlSocketCandidates, rewriteMysqlSql } from "./mysql.js";
 
 const keys = [
   "STEELDART_MYSQL_HOST",
@@ -8,7 +8,7 @@ const keys = [
   "STEELDART_MYSQL_DATABASE",
   "STEELDART_MYSQL_PORT",
   "STEELDART_MYSQL_PASSWORD_ENCODED",
-  "STEELDART_MYSQL_SSL",
+  "STEELDART_MYSQL_SOCKET",
   "MYSQL_HOST",
   "MYSQL_USER",
   "MYSQL_PASSWORD",
@@ -83,6 +83,11 @@ describe("mysql env", () => {
     process.env.STEELDART_MYSQL_PASSWORD = "p@ss#";
     process.env.STEELDART_MYSQL_SSL = "1";
     expect(mysqlConfigFromEnv()).toMatchObject({ host: "localhost", ssl: false });
+  });
+
+  it("prefers an explicit socket path", () => {
+    process.env.STEELDART_MYSQL_SOCKET = "/tmp/mysql.sock";
+    expect(mysqlSocketCandidates()[0]).toBe("/tmp/mysql.sock");
   });
 
   it("is inactive without host/user/database so desktop stays on sqlite", () => {
